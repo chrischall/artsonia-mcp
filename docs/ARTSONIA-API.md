@@ -136,3 +136,22 @@ Top-level selectors confirmed during recon; these are the **inner** structures
   relationship → a `<div>` whose own-text is the relationship (e.g. "Father"); the
   card also contains a `<b>Registered</b>` marker and the fan's email — do NOT
   surface the email in tool output unless intended.
+
+## Live write verification (executed 2026-06-05 against the real account)
+
+- **`set_notifications` ✅ confirmed** — but only after a fix the live run forced:
+  the opt-in checkboxes submit **`value="Y"`** (a literal `on` is silently
+  ignored — the save 302s but persists nothing), and `DidChangePassword` is
+  **`"N"`** (not `"0"`). The tool now captures each checkbox's real value and
+  re-sends `DidChangePassword` verbatim. Verified: a toggle persists and
+  re-reads back; FirstName/EmailAddress are untouched. **The 302 alone is NOT
+  proof of success on this form** — re-read to confirm.
+- **`invite_fan` ✅ confirmed** — POST created a real pending fan (showed up in
+  the fan club with the test `@example.com` email). The assumed `MemberType=fan`
+  is correct.
+- **`post_comment` ⚠️ submitted, not positively confirmed** — the POST is
+  accepted and 302s to a content page (`/schools/school.asp`), not a form bounce,
+  but the comment does **not** appear on the public artwork page or the parent
+  comments view. Most likely **held for teacher moderation** (standard for K-12
+  parent comments). Could not be confirmed from the parent side. Treat
+  `posted:true` as "submitted/pending," not "publicly visible."
