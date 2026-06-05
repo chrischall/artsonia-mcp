@@ -1,5 +1,4 @@
-import { readEnvVar, SessionNotAuthenticatedError } from '@chrischall/mcp-utils';
-import { McpToolError } from '@chrischall/mcp-utils';
+import { readEnvVar, McpToolError } from '@chrischall/mcp-utils';
 import { CookieJar } from './cookies.js';
 import type { ArtsoniaTransport } from './transport.js';
 
@@ -69,9 +68,10 @@ export class AuthManager {
     this.jar.setFromHeaders(res.setCookie);
     const redirectedToDest = (res.status === 301 || res.status === 302) && !!res.location && !/login\.asp/i.test(res.location);
     if (!redirectedToDest || this.jar.size === 0) {
-      // SessionNotAuthenticatedError generates: "Not signed in to Artsonia. Sign in in your
-      // browser, then try again." — matches /sign in/i required by the test assertion.
-      throw new SessionNotAuthenticatedError('Artsonia');
+      throw new McpToolError(
+        'Artsonia login failed — check your ARTSONIA_USERNAME / ARTSONIA_PASSWORD credentials.',
+        { hint: 'Verify the email/password are correct. Magic-link-only accounts are not supported by this server.' },
+      );
     }
     this.loggedIn = true;
   }
