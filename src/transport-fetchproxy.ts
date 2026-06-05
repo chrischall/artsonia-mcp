@@ -18,6 +18,7 @@ const DEFAULT_PORT = 37_149; // shared fleet port — do NOT change
 export class FetchproxyArtsoniaTransport implements ArtsoniaTransport {
   private inner: FetchproxyServer | null = null;
   private started = false;
+  private starting: Promise<void> | null = null;
 
   private buildOpts(): FetchproxyServerOpts {
     const portEnv = readEnvVar('ARTSONIA_WS_PORT');
@@ -32,11 +33,17 @@ export class FetchproxyArtsoniaTransport implements ArtsoniaTransport {
 
   private async ensureStarted(): Promise<void> {
     if (this.started) return;
-    // Lazy import: only loaded when fetchproxy mode is actually used.
-    const { FetchproxyServer } = await import('@fetchproxy/server');
-    this.inner = new FetchproxyServer(this.buildOpts());
-    await this.inner.listen();
-    this.started = true;
+    // Single-flight: concurrent first-calls share one init so we never construct
+    // two FetchproxyServers / bind the shared port twice.
+    if (this.starting) return this.starting;
+    this.starting = (async () => {
+      // Lazy import: only loaded when fetchproxy mode is actually used.
+      const { FetchproxyServer } = await import('@fetchproxy/server');
+      this.inner = new FetchproxyServer(this.buildOpts());
+      await this.inner.listen();
+      this.started = true;
+    })().finally(() => { this.starting = null; });
+    return this.starting;
   }
 
   async request(req: ArtsoniaRequest): Promise<ArtsoniaResponse> {

@@ -54,7 +54,9 @@ function listToolsViaStdio(entry: string, cwd: string): Promise<string[]> {
     });
     child.stderr.on('data', (d) => { err += d.toString(); });
     child.on('error', (e) => { clearTimeout(timer); reject(e); });
-    child.on('exit', (code) => {
+    // 'close' (not 'exit') so all stdout is drained first — avoids a flaky
+    // false-failure where the process exits before the pipe buffer is delivered.
+    child.on('close', (code) => {
       if (out.indexOf('"id":1') === -1) {
         clearTimeout(timer);
         reject(new Error(`server exited (code ${code}) before tools/list; stderr:\n${err}`));
