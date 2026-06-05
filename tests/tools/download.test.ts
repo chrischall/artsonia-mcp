@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { registerDownloadTools } from '../../src/tools/download.js';
 import { client } from '../../src/client.js';
 import { createTestHarness } from '../helpers.js';
@@ -27,6 +27,7 @@ function imageResponse(bytes = 5) {
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
 let dir: string;
 beforeEach(() => { mockFetchHtml.mockReset(); mockFetch.mockReset(); dir = mkdtempSync(join(tmpdir(), 'artsonia-dl-')); });
+afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort temp cleanup */ } });
 afterAll(async () => { if (harness) await harness.close(); });
 const parse = (res: any) => JSON.parse(res.content[0].text);
 
@@ -78,6 +79,31 @@ describe('artsonia_download_artwork', () => {
     const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, project: 'silhouette', confirm: true }));
     expect(out.downloaded_count).toBe(2);
     expect(readdirSync(dir).sort()).toEqual(['100.jpg', '300.jpg']); // 300 + 100 match "silhouette"
+  });
+
+  it('grade filter fetches details and keeps only the matching grade', async () => {
+    mockFetchHtml.mockImplementation(((path: string) => {
+      if (path.includes('portfolio.asp')) return Promise.resolve(PORTFOLIO);
+      if (path.includes('id=300')) return Promise.resolve(detail('300', '6', 'A'));
+      if (path.includes('id=200')) return Promise.resolve(detail('200', '5', 'B'));
+      return Promise.resolve(detail('100', '6', 'C'));
+    }) as never);
+    mockFetch.mockImplementation(() => Promise.resolve(imageResponse()));
+    // "Grade 6" normalizes to "6" and matches the detail pages' grade.
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, grade: 'Grade 6', confirm: true }));
+    expect(out.downloaded_count).toBe(2);
+    expect(readdirSync(dir).sort()).toEqual(['100.jpg', '300.jpg']); // grade-6 artworks only
+  });
+
+  it('reports failed downloads (non-ok response) without throwing', async () => {
+    mockFetchHtml.mockResolvedValue(PORTFOLIO as never);
+    mockFetch.mockImplementation((url: any) =>
+      Promise.resolve(String(url).includes('/300.jpg') ? new Response('nope', { status: 404 }) : imageResponse()));
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true }));
+    expect(out.downloaded_count).toBe(2);
+    expect(out.failed_count).toBe(1);
+    expect(out.failed[0]).toMatchObject({ artwork_id: '300', reason: 'HTTP 404' });
+    expect(readdirSync(dir).sort()).toEqual(['100.jpg', '200.jpg']); // the failed one wrote no file
   });
 
   it('resolution flows through to the CDN url', async () => {
