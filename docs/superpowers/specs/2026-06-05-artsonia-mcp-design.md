@@ -1,8 +1,15 @@
 # artsonia-mcp — Design
 
 **Date:** 2026-06-05
-**Status:** Approved (pending spec review)
+**Status:** Approved; endpoints verified live (see `docs/ARTSONIA-API.md`)
 **Archetype:** fetchproxy / browser-bridge (copy from `zillow-mcp`)
+
+> **Verified 2026-06-05** against a signed-in parent session. Artsonia is a
+> **classic server-rendered jQuery `.asp` site** — NOT an SPA/JSON-store site.
+> Data lives in the server-rendered HTML, so parsing uses `node-html-parser`
+> (not JSON-store decoding). No Cloudflare interstitial. Every form is authed
+> by the session cookie alone — **no CSRF / `__VIEWSTATE` token**. Concrete
+> paths/fields for every tool are in `docs/ARTSONIA-API.md`.
 
 ## Purpose
 
@@ -20,11 +27,19 @@ request rides the user's signed-in browser tab via `@fetchproxy/server`.
 - **Account:** parent/fan.
 - **Reads:** followed students, portfolio, artwork detail, comments, activity
   feed/notifications, fan list.
-- **Writes (confirm-gated, dry-run `preview()` by default):**
-  - `artsonia_post_comment` — built now, TDD, verified against a real capture.
-  - `artsonia_star_artwork`, `artsonia_invite_fan`, `artsonia_set_notifications`
-    — designed now, each **shipped only once its real request is captured and
-    verified**. Unverifiable ones are dropped, never guessed.
+- **Writes (confirm-gated, dry-run `preview()` by default)** — all verified:
+  - `artsonia_post_comment` — `POST /museum/enter.asp?artist=&art=`, body
+    `Comment=<text>`.
+  - `artsonia_invite_fan` — `POST /members/fanclub/add.asp?artist=`, isolated
+    form (`FirstName/LastName/EmailAddress/RelationshipID/…`). Test only to
+    `@example.com`.
+  - `artsonia_set_notifications` — **read-modify-write** of the master profile
+    form (`POST /members/profile/default.asp`): GET profile, re-send all
+    current values verbatim, flip ONLY the chosen opt-in
+    (`OptInNews`/`OptInArtistActivity`/`OptInPromos`), leave password fields
+    blank / `DidChangePassword=0`. Bundles PII — handled carefully, confirm-gated.
+  - `artsonia_star_artwork` — **DROPPED**: no star/favorite control exists for
+    the parent role (verified absent).
 - **Out of scope (YAGNI):** teacher/student roles, product/keepsake purchasing,
   artwork upload.
 
@@ -48,10 +63,11 @@ Fetchproxy archetype on the **shared fleet port `37149`** (`DEFAULT_PORT =
   - Deferred-config-error style: construct without throwing; surface bridge/auth
     errors at first tool call. Constructed in the **caller** (`index.ts`).
   - Error mapping lives here (see Error handling).
-- `src/store.ts` — parse the **SSR JSON store** from member pages: entity-decode
-  (`&quot;`/`&amp;`), bracket-match nested JSON (no regex), verify the parser
-  against **raw-fetched bytes** (not the live DOM), skip bot-manager fields
-  (`bm_*`, `client_ip`, `ja3`/`ja4`).
+- `src/parse.ts` — parse the **server-rendered HTML** with `node-html-parser`
+  (via `@chrischall/mcp-utils/html` helpers where they fit). Selectors are
+  pinned from live captures: `.artist-card`, `.grid-item`, `.fan-card`/
+  `.fan-row`, notifications section. Parsers are unit-tested against
+  **raw-fetched HTML fixtures** (not the live DOM). No JSON-store decoding.
 - `src/index.ts` — `runMcp({ name, version, banner, deps: client, tools })`;
   transport + client + session registry constructed in the caller.
 
@@ -78,9 +94,9 @@ Fetchproxy archetype on the **shared fleet port `37149`** (`DEFAULT_PORT =
 
 **Writes** (all `confirm`-gated via `schemaConfirm`; no `confirm:true` →
 no network call, return dry-run `preview()`; all via `client.write()`):
-- `artsonia_post_comment` (now)
-- `artsonia_star_artwork`, `artsonia_invite_fan`, `artsonia_set_notifications`
-  (verify-then-ship)
+- `artsonia_post_comment`
+- `artsonia_invite_fan`
+- `artsonia_set_notifications` (read-modify-write of the master profile form)
 
 ## Data flow
 
@@ -92,21 +108,23 @@ fetchproxy bridge → signed-in tab → SSR HTML/JSON → store parser →
 
 Typed `McpToolError` subclasses with actionable `hint`:
 - `SessionNotAuthenticatedError` — login-redirect / sign-in interstitial.
-- `BotWallError` — via shared `classifyBotWall`. If Artsonia is
-  Cloudflare-walled, detect the interstitial by **definitive markers only**
-  (`_cf_chl_opt`, `<title>Just a moment`) — never `cdn-cgi/challenge-platform`
-  or body-size gating.
+- `BotWallError` — via shared `classifyBotWall`. No Cloudflare interstitial
+  was observed in recon, so this is defensive only; if one ever appears, detect
+  by **definitive markers only** (`_cf_chl_opt`, `<title>Just a moment`) —
+  never `cdn-cgi/challenge-platform` or body-size gating.
 - Bridge failures surfaced via `artsonia_healthcheck` hints (bridge_down /
   timeout / protocol).
 - All error bodies through `truncateErrorMessage` (redacts Bearer/JWT, caps).
 
 ## Endpoint verification
 
-Mix of HAR/cURL (user-provided) + live Transporter session. **No write is
-coded against an assumed body**; confirm a real successful artifact end-to-end
-before encoding any gate field. Captured request *shapes* pinned in
-`docs/ARTSONIA-API.md`. Never commit cookies/tokens/signatures — secret-scan
-before every commit.
+**Done** — endpoints captured live via Chrome from a signed-in parent session
+and pinned (shapes only) in `docs/ARTSONIA-API.md`. No write was coded against
+an assumed body. During implementation, the first real execution of each write
+is verified end-to-end: `post_comment` confirmed by the user on a real artwork;
+`invite_fan` test-sent to an `@example.com` address; `set_notifications`
+round-tripped by reading the opt-in back. Never commit cookies/tokens/PII —
+secret-scan before every commit.
 
 ## Testing
 
