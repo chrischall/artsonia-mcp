@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/chrischall/artsonia-mcp/compare/v0.3.0...v0.4.0) (2026-06-05)
+
+
+### Features
+
+* **download:** descriptive filenames + source-accurate timestamps + idempotent re-runs ([#10](https://github.com/chrischall/artsonia-mcp/issues/10)) ([1a9115e](https://github.com/chrischall/artsonia-mcp/commit/1a9115e13176b16e1936477ea99f998734784cf2))
+
 ## [0.3.0](https://github.com/chrischall/artsonia-mcp/compare/v0.2.0...v0.3.0) (2026-06-05)
 
 
