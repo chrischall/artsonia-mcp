@@ -108,13 +108,17 @@ Identifiers:
   uses `full` by default and fetches with a plain server-side request.
 - The artwork page's "Download image" link is `/shared/utils/getImage.asp?art=<id>`
   (forces a download) — NOT used; the direct CDN URL is simpler and public.
-- **No per-artwork date exists** in any page (no meta/ISO date, `<time>`, or
-  "added on"). Only **grade** (`created … in Grade <N>` on the detail page) and
-  **class** (the `from school project "<name>"`) are available, and only on each
-  artwork's *detail* page — so filtering by class/grade requires a detail fetch
-  per artwork. Chronology is approximated by **portfolio order** (reliably
-  newest-first; artwork ids descend over time), which backs the "most-recent N"
-  option in place of a true date range.
+- **Per-artwork date:** no teacher-entered "created" date exists in any page
+  (no meta/ISO date, `<time>`, "added on"). BUT the CDN image returns a real,
+  per-artwork **`Last-Modified`** header (upload/processing time) — verified
+  spanning 2022→2026 across one portfolio, at **zero extra cost** (same GET as
+  the download). The downloader uses it to set each file's mtime and the
+  `{date}` filename token. Only **grade** and **class** (`from school project`)
+  live on the detail page (→ a detail fetch per artwork for descriptive names or
+  class/grade filters). `getImage.asp` and `art.asp` have **no** `Last-Modified`;
+  the CDN image is the date source.
+- Chronology is also approximated by **portfolio order** (reliably newest-first;
+  ids descend over time), backing the "most-recent N" option.
 
 ### star_artwork — NOT AVAILABLE ❌
 - No star/applause/favorite control or endpoint exists on the artwork page
