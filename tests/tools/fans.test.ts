@@ -11,7 +11,7 @@ const fans = readFileSync(join(FIX, 'fans.html'), 'utf8');
 const mockFetchHtml = vi.spyOn(client, 'fetchHtml').mockResolvedValue(undefined as never);
 
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
-beforeEach(() => mockFetchHtml.mockClear());
+beforeEach(() => { mockFetchHtml.mockClear(); });
 afterAll(async () => { if (harness) await harness.close(); });
 const parse = (res: any) => JSON.parse(res.content[0].text);
 
