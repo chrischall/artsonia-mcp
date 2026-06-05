@@ -58,6 +58,7 @@ describe('parseArtwork', () => {
     expect(a.title).toBe('My silhouette still life');
     expect(a.artist_screen_name).toBe('Lucas26251');
     expect(a.views).toBe(4);
+    expect(a.grade).toBe('6');
     expect(a.project).toBe('6th Grade Silhouette Still Life');
     expect(a.comment_entry).toMatchObject({ artist_id: '13447141', artwork_id: '150567537' });
     // comments: 0-comment fixture — expect empty array (markup is UNVERIFIED for non-zero)

@@ -7,13 +7,14 @@ import { registerPortfolioTools } from '../src/tools/portfolio.js';
 import { registerFanTools } from '../src/tools/fans.js';
 import { registerFeedbackTools } from '../src/tools/feedback.js';
 import { registerAccountTools } from '../src/tools/account.js';
+import { registerDownloadTools } from '../src/tools/download.js';
 import { registerWriteTools } from '../src/tools/writes.js';
 
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
 afterAll(async () => { if (harness) await harness.close(); });
 
 describe('full tool surface', () => {
-  it('registers all 14 tools', async () => {
+  it('registers all 15 tools', async () => {
     harness = await createTestHarness((s) => {
       registerHealthcheckTools(s, client);
       registerStudentTools(s, client);
@@ -21,10 +22,12 @@ describe('full tool surface', () => {
       registerFanTools(s, client);
       registerFeedbackTools(s, client);
       registerAccountTools(s, client);
+      registerDownloadTools(s, client);
       registerWriteTools(s, client);
     });
     const names = (await harness.listTools()).map((t) => t.name).sort();
     expect(names).toEqual([
+      'artsonia_download_artwork',
       'artsonia_get_activity',
       'artsonia_get_artwork',
       'artsonia_get_awards',
