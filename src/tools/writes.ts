@@ -18,19 +18,28 @@ function previewResult(action: string, wouldSend: Record<string, unknown>, cavea
 const OPTIN_FIELDS = { news: 'OptInNews', artist_activity: 'OptInArtistActivity', promos: 'OptInPromos' } as const;
 const PASSWORD_FIELDS = new Set(['OldPassword', 'NewPassword', 'NewPassword2']);
 
-interface ProfileForm { fields: Record<string, string>; checkboxes: Record<string, boolean>; }
+interface ProfileForm {
+  fields: Record<string, string>;
+  checkboxes: Record<string, boolean>;
+  /** The `value` attribute each checkbox submits when checked (Artsonia uses "Y", not "on"). */
+  checkboxValues: Record<string, string>;
+}
 
 export function parseProfileForm(html: string): ProfileForm {
   const form = parse(html).querySelector('#TheForm');
   if (!form) throw new Error('Could not find the Artsonia profile form (#TheForm).');
   const fields: Record<string, string> = {};
   const checkboxes: Record<string, boolean> = {};
+  const checkboxValues: Record<string, string> = {};
   for (const el of form.querySelectorAll('input, select')) {
     const name = el.getAttribute('name');
     if (!name) continue;
     const type = (el.getAttribute('type') ?? el.tagName.toLowerCase());
     if (type === 'checkbox') {
       checkboxes[name] = el.hasAttribute('checked');
+      // Artsonia opt-in checkboxes submit value="Y" when checked — a literal "on"
+      // is silently ignored by the server (the save 302s but persists nothing).
+      checkboxValues[name] = el.getAttribute('value') ?? 'Y';
     } else if (el.tagName.toLowerCase() === 'select') {
       const sel = el.querySelector('option[selected]') ?? el.querySelector('option');
       fields[name] = sel?.getAttribute('value') ?? '';
@@ -38,7 +47,7 @@ export function parseProfileForm(html: string): ProfileForm {
       fields[name] = el.getAttribute('value') ?? '';
     }
   }
-  return { fields, checkboxes };
+  return { fields, checkboxes, checkboxValues };
 }
 
 export function registerWriteTools(server: McpServer, client: ArtsoniaClient): void {
@@ -117,20 +126,24 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       if (news === undefined && artist_activity === undefined && promos === undefined) {
         return textResult({ error: 'Specify at least one of news / artist_activity / promos.' });
       }
-      const { fields, checkboxes } = parseProfileForm(await client.fetchHtml('/members/profile/'));
+      const { fields, checkboxes, checkboxValues } = parseProfileForm(await client.fetchHtml('/members/profile/'));
       const nextChecks = { ...checkboxes };
       for (const [key, fieldName] of Object.entries(OPTIN_FIELDS)) {
         const want = desired[key as keyof typeof desired];
         if (want !== undefined) nextChecks[fieldName] = want;
       }
       const params = new URLSearchParams();
+      // Re-send every non-checkbox field verbatim (preserving the form's own
+      // DidChangePassword="N" so the server doesn't attempt a password change),
+      // except the password fields, which are always blanked.
       for (const [name, value] of Object.entries(fields)) {
         if (PASSWORD_FIELDS.has(name)) { params.set(name, ''); continue; }
-        if (name === 'DidChangePassword') { params.set(name, '0'); continue; }
         params.set(name, value);
       }
+      // Checked opt-ins are submitted with the checkbox's real value ("Y"); unchecked
+      // boxes are omitted, exactly as the browser form does.
       for (const [name, on] of Object.entries(nextChecks)) {
-        if (on) params.set(name, 'on');
+        if (on) params.set(name, checkboxValues[name] ?? 'Y');
       }
       const resultingOptIns = {
         OptInNews: nextChecks['OptInNews'] ?? false,

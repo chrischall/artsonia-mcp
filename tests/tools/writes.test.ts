@@ -64,10 +64,10 @@ describe('write tools', () => {
     expect(path).toBe('/members/profile/default.asp');
     const params = new URLSearchParams(body);
     expect(params.get('FirstName')).toBe('Chris');
-    expect(params.get('OptInNews')).toBe('on');
-    expect(params.get('OptInArtistActivity')).toBe('on');
-    expect(params.has('OptInPromos')).toBe(false);
-    expect(params.get('NewPassword')).toBe('');
-    expect(params.get('DidChangePassword')).toBe('0');
+    expect(params.get('OptInNews')).toBe('Y');            // checked → real checkbox value, not "on"
+    expect(params.get('OptInArtistActivity')).toBe('Y');  // preserved (was checked)
+    expect(params.has('OptInPromos')).toBe(false);        // unchecked → omitted
+    expect(params.get('NewPassword')).toBe('');           // password blanked
+    expect(params.get('DidChangePassword')).toBe('N');    // preserved (no password change)
   });
 });
