@@ -142,6 +142,26 @@ describe('artsonia_download_artwork', () => {
     expect(readdirSync(dir).sort()).toEqual(['200.jpg', '300.jpg']);
   });
 
+  it('limit + default template only fetches detail for the newest N (no whole-portfolio scan)', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 2, confirm: true }));
+    expect(out.downloaded_count).toBe(2);
+    // portfolio (1) + detail for the 2 newest only = 3 fetches, NOT 4 (id 100 never fetched).
+    expect(mockFetchHtml).toHaveBeenCalledTimes(3);
+    expect(mockFetchHtml).not.toHaveBeenCalledWith('/museum/art.asp?id=100');
+    expect(readdirSync(dir).sort()).toEqual([
+      'Grade 6 - Clay - Clay pot (200).jpg',
+      'Grade 6 - Silhouette - My silhouette (300).jpg',
+    ]);
+  });
+
+  it('a malformed Last-Modified header falls back to download-time, not failure', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(imageResponse('not-a-real-date')));
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true }));
+    expect(out.downloaded_count).toBe(3);
+    expect(out.failed_count).toBe(0);
+    expect(out.downloaded[0].date_source).toBe('download-time');
+  });
+
   it('reports failed downloads without throwing', async () => {
     mockFetch.mockImplementation((url: any) =>
       Promise.resolve(String(url).includes('/300.jpg') ? new Response('nope', { status: 404 }) : imageResponse()));

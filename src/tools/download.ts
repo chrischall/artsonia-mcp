@@ -49,8 +49,9 @@ export function buildFilename(template: string, fields: FilenameFields, artworkI
   // Slugify: drop filesystem-unsafe chars + control chars + leading dots; collapse whitespace.
   name = name.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').replace(/^\.+/, '').replace(/\s+/g, ' ').trim();
   if (name.length > MAX_NAME_LEN) name = name.slice(0, MAX_NAME_LEN).trim();
-  // Guarantee uniqueness + idempotency: every name carries the artwork_id.
-  if (!template.includes('{artwork_id}') && !name.includes(artworkId)) {
+  // Guarantee uniqueness + idempotency: every name carries the artwork_id in its
+  // canonical "(id)" form unless the template already places the id explicitly.
+  if (!template.includes('{artwork_id}') && !name.includes(`(${artworkId})`)) {
     name = name ? `${name} (${artworkId})` : artworkId;
   }
   if (!name) name = artworkId;
@@ -111,7 +112,11 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       // 2. Detail fetch (for naming and/or project/grade filtering).
       if (needDetail) {
         const wantGrade = normalizeGrade(grade);
-        const detailed = await mapLimit(tiles, FETCH_CONCURRENCY, async (t): Promise<Item> => {
+        // With a limit and no filter, only the newest N need a detail page — don't
+        // fetch the whole portfolio just to throw most of it away.
+        const tilesToDetail =
+          limit !== undefined && project === undefined && grade === undefined ? tiles.slice(0, limit) : tiles;
+        const detailed = await mapLimit(tilesToDetail, FETCH_CONCURRENCY, async (t): Promise<Item> => {
           const d = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${t.artwork_id}`));
           return { artwork_id: t.artwork_id, is_private: t.is_private, title: d.title, project: d.project, grade: d.grade };
         });
@@ -122,7 +127,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         );
       }
 
-      // 3. Most-recent-N.
+      // 3. Most-recent-N (no-op when already capped above; still needed for the filtered path).
       if (limit !== undefined) items = items.slice(0, limit);
 
       const destDir = expandPath(dest);
@@ -156,8 +161,12 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
           const res = await fetch(artworkImageUrl(it.artwork_id, resolution));
           if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
 
+          // Parse Last-Modified defensively — a malformed header must NOT fail the
+          // download; it just falls back to download-time.
           const lastMod = res.headers.get('last-modified');
-          const date = lastMod ? new Date(lastMod).toISOString().slice(0, 10) : '';
+          const parsed = lastMod ? new Date(lastMod) : null;
+          const sourceDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+          const date = sourceDate ? sourceDate.toISOString().slice(0, 10) : '';
           if (!file) {
             file = join(destDir, buildFilename(template, { ...it, date }, it.artwork_id));
             if (skip_existing && existsSync(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
@@ -166,18 +175,15 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
           const buf = Buffer.from(await res.arrayBuffer());
           await writeFile(file, buf);
           // date_source / timestamp reflect the file's ACTUAL mtime.
-          const fromSource = set_mtime_from_source && !!lastMod;
-          if (fromSource) {
-            const when = new Date(lastMod!);
-            await utimes(file, when, when);
-          }
+          const fromSource = set_mtime_from_source && sourceDate !== null;
+          if (fromSource) await utimes(file, sourceDate!, sourceDate!);
           return {
             kind: 'downloaded',
             artwork_id: it.artwork_id,
             file,
             bytes: buf.length,
             date_source: fromSource ? 'last-modified' : 'download-time',
-            timestamp: (fromSource ? new Date(lastMod!) : new Date()).toISOString(),
+            timestamp: (fromSource ? sourceDate! : new Date()).toISOString(),
           };
         } catch (e) {
           return { kind: 'failed', artwork_id: it.artwork_id, reason: messageOf(e) };
