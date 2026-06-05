@@ -228,3 +228,66 @@ export function parseFeedback(html: string): Feedback[] {
     };
   });
 }
+
+export interface Award {
+  name: string;
+  /** True only when the card says "Earned" (NOT "Not earned"). */
+  earned: boolean;
+  /** Criteria text, e.g. "Publish three or more artworks this year." (current-year only). */
+  description: string;
+  /** Progress text, e.g. "2 fans joined" (current-year only). */
+  progress: string;
+  /** "current" = this school year's badges; "past" = badges earned in prior years. */
+  period: 'current' | 'past';
+}
+
+export function parseAwards(html: string): Award[] {
+  const root = parse(html);
+  const awards: Award[] = [];
+  // Current-year achievement badges: name / status / criteria / progress.
+  // The card is `<img><div>(content)<div>name</div><div>status</div>…</div>`;
+  // walk the content wrapper's child divs (the first descendant div is the wrapper).
+  for (const card of root.querySelectorAll('.award-card')) {
+    const content = card.querySelector('div');
+    const lines = content ? content.querySelectorAll('div').map((d) => text(d)).filter(Boolean) : [];
+    const name = lines[0] ?? '';
+    if (!name) continue;
+    awards.push({
+      name,
+      earned: /^earned$/i.test((lines[1] ?? '').trim()),
+      description: lines[2] ?? '',
+      progress: lines[3] ?? '',
+      period: 'current',
+    });
+  }
+  // Past-year earned badges: just an icon (artist_<name>[_ghosted].gif).
+  for (const card of root.querySelectorAll('.award-card-past')) {
+    const file = card.querySelector('img')?.getAttribute('src')?.split('/').pop() ?? '';
+    const slug = file.replace(/\.gif$/i, '').replace(/_ghosted$/i, '').replace(/^artist_/i, '');
+    const name = slug ? slug.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Award';
+    awards.push({ name, earned: true, description: '', progress: '', period: 'past' });
+  }
+  return awards;
+}
+
+export interface Profile {
+  first_name: string;
+  last_name: string;
+  email: string;
+  mobile: string;
+  opt_ins: { news: boolean; artist_activity: boolean; promos: boolean };
+}
+
+/** Read-only view of the parent profile form (`#TheForm` on /members/profile/). */
+export function parseProfile(html: string): Profile {
+  const form = parse(html).querySelector('#TheForm');
+  const val = (name: string) => form?.querySelector(`input[name="${name}"], select[name="${name}"]`)?.getAttribute('value') ?? '';
+  const checked = (name: string) => form?.querySelector(`input[name="${name}"]`)?.hasAttribute('checked') ?? false;
+  return {
+    first_name: val('FirstName'),
+    last_name: val('LastName'),
+    email: val('EmailAddress'),
+    mobile: val('MobileNumber'),
+    opt_ins: { news: checked('OptInNews'), artist_activity: checked('OptInArtistActivity'), promos: checked('OptInPromos') },
+  };
+}
