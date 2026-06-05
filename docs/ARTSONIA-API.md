@@ -51,7 +51,7 @@ Identifiers:
 | get_artwork | `/museum/art.asp?id=<artworkId>` | title (page `<title>`), artist screen-name, view count, keepsakes, comment link |
 | list_comments | `/members/comments/?artist=<artistId>` | comments list (empty state when 0) |
 | get_fans | `/members/fanclub/?artist=<artistId>` | `.fan-card` / `.fan-row` → fan name, relationship |
-| get_feedback (bonus) | `/members/feedback/?artist=<artistId>` | teacher feedback |
+| get_feedback | `/members/feedback/?artist=<artistId>` | `.comment-row` → `.comment` (message), `.commenter` (who/when), `.comment-art a` (artwork), `.comment-options` "not been marked as read" (unread flag) |
 
 ## Writes (POST, `application/x-www-form-urlencoded`, session-cookie auth, no CSRF)
 
@@ -85,6 +85,16 @@ Identifiers:
   `DidChangePassword=0`). Bundles PII + email-change/password logic.
   **Design decision pending** (see spec) — may ship as read-only status
   instead.
+
+### mark_feedback_read — verified form shape ✅ (live-executed: pending)
+- Form `#TheForm` on `/members/feedback/?artist=<artistId>` with a single submit
+  input `name="ConfirmAsRead"` value `"Mark as Read"`.
+- **`POST /members/feedback/default.asp?artist=<artistId>`**, body
+  **`ConfirmAsRead=Mark as Read`**. Marks ALL of the student's feedback as read
+  (no per-item control). `get_feedback` is live-verified; this write's shape is
+  captured but not yet live-executed (left to the user — marking consumes the
+  unread state). As with all writes here, a 302 alone is not proof — re-read
+  `get_feedback` to confirm `is_read` flips.
 
 ### star_artwork — NOT AVAILABLE ❌
 - No star/applause/favorite control or endpoint exists on the artwork page
