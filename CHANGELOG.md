@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/chrischall/artsonia-mcp/compare/v0.2.0...v0.3.0) (2026-06-05)
+
+
+### Features
+
+* add get_awards and get_profile reads ([#9](https://github.com/chrischall/artsonia-mcp/issues/9)) ([651458c](https://github.com/chrischall/artsonia-mcp/commit/651458cc214240bfd922ab956eda6dc0cfa28559))
+* add teacher feedback tools (get_feedback + mark_feedback_read) ([#6](https://github.com/chrischall/artsonia-mcp/issues/6)) ([bfc5015](https://github.com/chrischall/artsonia-mcp/commit/bfc50156255a4d851ab578b3e7854dbb5e06baa1))
+* download artwork (by student / class / grade / most-recent N) ([#8](https://github.com/chrischall/artsonia-mcp/issues/8)) ([0e2fe61](https://github.com/chrischall/artsonia-mcp/commit/0e2fe6114ec0acc108bcd8a1cf61711f9cb56f2a))
+
+
+### Bug Fixes
+
+* server crashed on launch (eager fetchproxy import + wrong bin path) ([#5](https://github.com/chrischall/artsonia-mcp/issues/5)) ([c38f173](https://github.com/chrischall/artsonia-mcp/commit/c38f173b8424f204328fd4a5ec044b461c88bdf0))
+
 ## [0.2.0](https://github.com/chrischall/artsonia-mcp/compare/v0.1.0...v0.2.0) (2026-06-05)
 
 
