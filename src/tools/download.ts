@@ -1,19 +1,83 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, utimes } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, artworkImageUrl } from '../parse.js';
 
 const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
+const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
+const FETCH_CONCURRENCY = 6;
+const MAX_NAME_LEN = 150;
 
 /** "Grade 6" / "grade 6" / "6" → "6"; "Grade K" → "k". */
 function normalizeGrade(g: string | null | undefined): string {
   return (g ?? '').replace(/grade/i, '').trim().toLowerCase();
 }
 
-interface Selected { artwork_id: string; title?: string; project?: string; grade?: string | null }
+export interface FilenameFields {
+  title?: string;
+  project?: string;
+  grade?: string | null;
+  /** YYYY-MM-DD; only known after the image's Last-Modified is read. */
+  date?: string;
+}
+
+/**
+ * Resolve a filename template to a safe, unique `.jpg` name.
+ * Tokens: {title} {project} {grade}(→"Grade N") {date} {artwork_id}. Empty tokens
+ * and their surrounding " - " separators are dropped. The result is slugified for
+ * filesystem safety, and the artwork_id is always appended (unless the template
+ * already includes it) so names are guaranteed unique AND a pure function of the
+ * artwork (→ idempotent re-runs). Untitled/empty → just the artwork_id.
+ */
+export function buildFilename(template: string, fields: FilenameFields, artworkId: string): string {
+  const tokens: Record<string, string> = {
+    title: fields.title?.trim() ?? '',
+    project: fields.project?.trim() ?? '',
+    grade: fields.grade ? `Grade ${fields.grade}` : '',
+    date: fields.date ?? '',
+    artwork_id: artworkId,
+  };
+  let name = template.replace(/\{(title|project|grade|date|artwork_id)\}/g, (_, k: string) => tokens[k] ?? '');
+  // Collapse separators left by empty tokens, e.g. "Grade 6 -  - Title" → "Grade 6 - Title".
+  let prev: string;
+  do { prev = name; name = name.replace(/\s*-\s*-\s*/g, ' - '); } while (name !== prev);
+  name = name.replace(/^[\s\-_]+|[\s\-_]+$/g, '');
+  // Slugify: drop filesystem-unsafe chars + control chars + leading dots; collapse whitespace.
+  name = name.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').replace(/^\.+/, '').replace(/\s+/g, ' ').trim();
+  if (name.length > MAX_NAME_LEN) name = name.slice(0, MAX_NAME_LEN).trim();
+  // Guarantee uniqueness + idempotency: every name carries the artwork_id in its
+  // canonical "(id)" form unless the template already places the id explicitly.
+  if (!template.includes('{artwork_id}') && !name.includes(`(${artworkId})`)) {
+    name = name ? `${name} (${artworkId})` : artworkId;
+  }
+  if (!name) name = artworkId;
+  return `${name}.jpg`;
+}
+
+interface Item { artwork_id: string; is_private: boolean; title?: string; project?: string; grade?: string | null }
+type Outcome =
+  | { kind: 'downloaded'; artwork_id: string; file: string; bytes: number; date_source: 'last-modified' | 'download-time'; timestamp: string }
+  | { kind: 'skipped'; artwork_id: string; file: string }
+  | { kind: 'failed'; artwork_id: string; reason: string };
+
+/** Bounded-concurrency map that preserves input order in the result. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i], i);
+      }
+    }),
+  );
+  return results;
+}
 
 export function registerDownloadTools(server: McpServer, client: ArtsoniaClient): void {
   server.registerTool(
@@ -21,7 +85,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
     {
       title: "Download a student's artwork images",
       description:
-        "Download full-resolution images of a student's artwork to a local folder. Optionally filter by class/project name (substring), by grade, and/or keep only the most-recent N (Artsonia exposes no real dates, but the portfolio is reliably newest-first). Without confirm:true this is a DRY RUN that lists what WOULD be downloaded and writes nothing. Note: project/grade filters require fetching each artwork's detail page (slower).",
+        "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Without confirm:true this is a DRY RUN that lists the resolved filenames and writes nothing. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true }),
       inputSchema: {
         artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).'),
@@ -30,33 +94,45 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         grade: z.string().min(1).optional().describe('Only artworks created in this grade, e.g. "6" or "Grade 6".'),
         limit: z.number().int().positive().optional().describe('Keep only the N most recent matching artworks (portfolio is newest-first).'),
         resolution: z.enum(['full', 'xlarge', 'large', 'medium', 'small']).default('full').describe('Image resolution. "full" is the original (~0.7 MB each).'),
+        filename_template: z.string().min(1).default(DEFAULT_TEMPLATE).describe('Filename pattern. Tokens: {title} {project} {grade} {date} {artwork_id}. The artwork_id is auto-appended for uniqueness if absent. Use "{artwork_id}" for the fast id-only path (no detail fetch).'),
+        set_mtime_from_source: z.boolean().default(true).describe("Set each file's modified time from the image's Last-Modified header (its Artsonia upload date) instead of the download moment."),
+        skip_existing: z.boolean().default(true).describe('Skip artworks whose target file already exists (idempotent re-runs). Set false to overwrite.'),
         confirm: schemaConfirm,
       },
     },
-    async ({ artist_id, dest, project, grade, limit, resolution, confirm }) => {
-      // 1. Portfolio → artwork ids, newest-first.
-      const tiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
-      let items: Selected[] = tiles.map((t) => ({ artwork_id: t.artwork_id }));
+    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, set_mtime_from_source, skip_existing, confirm }) => {
+      const template = filename_template;
+      const templateUsesDate = /\{date\}/.test(template);
+      const needDetail = project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(template);
 
-      // 2. project/grade filters need each artwork's detail page.
-      if (project !== undefined || grade !== undefined) {
+      // 1. Portfolio → artwork ids (newest-first) + private flags.
+      const tiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
+      let items: Item[] = tiles.map((t) => ({ artwork_id: t.artwork_id, is_private: t.is_private }));
+
+      // 2. Detail fetch (for naming and/or project/grade filtering).
+      if (needDetail) {
         const wantGrade = normalizeGrade(grade);
-        const matched: Selected[] = [];
-        for (const t of tiles) {
+        // With a limit and no filter, only the newest N need a detail page — don't
+        // fetch the whole portfolio just to throw most of it away.
+        const tilesToDetail =
+          limit !== undefined && project === undefined && grade === undefined ? tiles.slice(0, limit) : tiles;
+        const detailed = await mapLimit(tilesToDetail, FETCH_CONCURRENCY, async (t): Promise<Item> => {
           const d = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${t.artwork_id}`));
-          const okProject = project === undefined || (d.project ?? '').toLowerCase().includes(project.toLowerCase());
-          const okGrade = grade === undefined || normalizeGrade(d.grade) === wantGrade;
-          if (okProject && okGrade) matched.push({ artwork_id: t.artwork_id, title: d.title, project: d.project, grade: d.grade });
-        }
-        items = matched;
+          return { artwork_id: t.artwork_id, is_private: t.is_private, title: d.title, project: d.project, grade: d.grade };
+        });
+        items = detailed.filter(
+          (it) =>
+            (project === undefined || (it.project ?? '').toLowerCase().includes(project.toLowerCase())) &&
+            (grade === undefined || normalizeGrade(it.grade) === wantGrade),
+        );
       }
 
-      // 3. Most-recent-N.
+      // 3. Most-recent-N (no-op when already capped above; still needed for the filtered path).
       if (limit !== undefined) items = items.slice(0, limit);
 
       const destDir = expandPath(dest);
 
-      // 4. Dry run.
+      // 4. Dry run — show resolved filenames (date-token names finalize at download time).
       if (confirm !== true) {
         return textResult({
           preview: true,
@@ -65,33 +141,67 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
           count: items.length,
           dest: destDir,
           resolution,
-          artworks: items.slice(0, 100),
+          filename_template: template,
+          artworks: items.slice(0, 200).map((it) => ({
+            artwork_id: it.artwork_id,
+            ...(it.title !== undefined ? { title: it.title } : {}),
+            filename: templateUsesDate ? '(finalized with {date} at download)' : buildFilename(template, it, it.artwork_id),
+          })),
         });
       }
 
-      // 5. Download.
+      // 5. Download (bounded concurrency).
       await mkdir(destDir, { recursive: true });
-      const downloaded: Array<{ artwork_id: string; file: string; bytes: number }> = [];
-      const failed: Array<{ artwork_id: string; reason: string }> = [];
-      for (const it of items) {
+      const outcomes = await mapLimit(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
         try {
+          // Filenames without {date} are known up-front → skip before fetching.
+          let file = templateUsesDate ? null : join(destDir, buildFilename(template, it, it.artwork_id));
+          if (file && skip_existing && existsSync(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+
           const res = await fetch(artworkImageUrl(it.artwork_id, resolution));
-          if (!res.ok) { failed.push({ artwork_id: it.artwork_id, reason: `HTTP ${res.status}` }); continue; }
+          if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
+
+          // Parse Last-Modified defensively — a malformed header must NOT fail the
+          // download; it just falls back to download-time.
+          const lastMod = res.headers.get('last-modified');
+          const parsed = lastMod ? new Date(lastMod) : null;
+          const sourceDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+          const date = sourceDate ? sourceDate.toISOString().slice(0, 10) : '';
+          if (!file) {
+            file = join(destDir, buildFilename(template, { ...it, date }, it.artwork_id));
+            if (skip_existing && existsSync(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+          }
+
           const buf = Buffer.from(await res.arrayBuffer());
-          const file = join(destDir, `${it.artwork_id}.jpg`);
           await writeFile(file, buf);
-          downloaded.push({ artwork_id: it.artwork_id, file, bytes: buf.length });
+          // date_source / timestamp reflect the file's ACTUAL mtime.
+          const fromSource = set_mtime_from_source && sourceDate !== null;
+          if (fromSource) await utimes(file, sourceDate!, sourceDate!);
+          return {
+            kind: 'downloaded',
+            artwork_id: it.artwork_id,
+            file,
+            bytes: buf.length,
+            date_source: fromSource ? 'last-modified' : 'download-time',
+            timestamp: (fromSource ? sourceDate! : new Date()).toISOString(),
+          };
         } catch (e) {
-          failed.push({ artwork_id: it.artwork_id, reason: messageOf(e) });
+          return { kind: 'failed', artwork_id: it.artwork_id, reason: messageOf(e) };
         }
-      }
+      });
+
+      const downloaded = outcomes.filter((o): o is Extract<Outcome, { kind: 'downloaded' }> => o.kind === 'downloaded');
+      const skipped = outcomes.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
+      const failed = outcomes.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
       return textResult({
         downloaded_count: downloaded.length,
+        skipped_count: skipped.length,
         failed_count: failed.length,
         dest: destDir,
         resolution,
-        downloaded,
-        ...(failed.length ? { failed } : {}),
+        downloaded: downloaded.map(({ kind, ...rest }) => rest),
+        ...(skipped.length ? { skipped: skipped.map(({ kind, ...rest }) => rest) } : {}),
+        ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => rest) } : {}),
       });
     },
   );
