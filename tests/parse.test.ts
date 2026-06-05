@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseStudents, parseNotifications, parsePortfolio, parseArtwork, parseFans } from '../src/parse.js';
+import { parseStudents, parseNotifications, parsePortfolio, parseArtwork, parseFans, parseFeedback } from '../src/parse.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const fx = (name: string) => readFileSync(join(FIX, name), 'utf8');
@@ -72,5 +72,20 @@ describe('parseFans', () => {
     expect(fans).toHaveLength(2);
     expect(fans[0]).toMatchObject({ name: 'Chris Hall', relationship: 'Father' });
     expect(fans[1]).toMatchObject({ name: 'Grandma Jo', relationship: 'Grandparent' });
+  });
+});
+
+describe('parseFeedback', () => {
+  it('extracts message, attribution, artwork, and read state from .comment-row', () => {
+    const fb = parseFeedback(fx('feedback.html'));
+    expect(fb).toHaveLength(2);
+    expect(fb[0]).toMatchObject({
+      artwork_id: '150360715',
+      message: 'Looks ready to start next class.',
+      is_read: false,
+      thumbnail: 'https://images.artsonia.com/art/small/150360715.jpg',
+    });
+    expect(fb[0].posted_by).toContain('Curt Atkins');
+    expect(fb[1]).toMatchObject({ artwork_id: '148945137', is_read: true });
   });
 });

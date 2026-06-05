@@ -200,3 +200,31 @@ export function parseFans(html: string): Fan[] {
     return { name, relationship };
   }).filter((f): f is Fan => f !== null);
 }
+
+export interface Feedback {
+  /** Artwork the feedback is about (from the row's `art.asp?id=` link). */
+  artwork_id: string | null;
+  /** The teacher feedback text. */
+  message: string;
+  /** Attribution line, e.g. "Posted 9 months ago by Curt Atkins (teacher) at <School>". */
+  posted_by: string;
+  /** False while the row shows "has not been marked as read". */
+  is_read: boolean;
+  thumbnail: string | null;
+}
+
+export function parseFeedback(html: string): Feedback[] {
+  const root = parse(html);
+  return root.querySelectorAll('.comment-row').map((row): Feedback => {
+    const link = row.querySelector('.comment-art a[href*="art.asp"]');
+    const artwork_id = attrId(link?.getAttribute('href'), 'id');
+    const options = text(row.querySelector('.comment-options'));
+    return {
+      artwork_id,
+      message: text(row.querySelector('.comment')),
+      posted_by: text(row.querySelector('.commenter')),
+      is_read: !/not been marked as read/i.test(options),
+      thumbnail: artwork_id ? `https://images.artsonia.com/art/small/${artwork_id}.jpg` : null,
+    };
+  });
+}
