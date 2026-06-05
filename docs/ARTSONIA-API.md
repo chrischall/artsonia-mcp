@@ -98,6 +98,24 @@ Identifiers:
   unread state). As with all writes here, a 302 alone is not proof — re-read
   `get_feedback` to confirm `is_read` flips.
 
+## Artwork images / download (verified live 2026-06-05)
+
+- Full-resolution images live on a **public CDN** — no auth/cookie needed (even
+  for `private-art`, whose bytes are reachable if you know the id):
+  `https://images.artsonia.com/art/<resolution>/<artworkId>.jpg`.
+  Resolutions (approx sizes for one piece): `small` 11 KB · `medium` 34 KB ·
+  `large` 58 KB · `xlarge` 102 KB · `full`/`original`/`standard` ~665 KB. The MCP
+  uses `full` by default and fetches with a plain server-side request.
+- The artwork page's "Download image" link is `/shared/utils/getImage.asp?art=<id>`
+  (forces a download) — NOT used; the direct CDN URL is simpler and public.
+- **No per-artwork date exists** in any page (no meta/ISO date, `<time>`, or
+  "added on"). Only **grade** (`created … in Grade <N>` on the detail page) and
+  **class** (the `from school project "<name>"`) are available, and only on each
+  artwork's *detail* page — so filtering by class/grade requires a detail fetch
+  per artwork. Chronology is approximated by **portfolio order** (reliably
+  newest-first; artwork ids descend over time), which backs the "most-recent N"
+  option in place of a true date range.
+
 ### star_artwork — NOT AVAILABLE ❌
 - No star/applause/favorite control or endpoint exists on the artwork page
   for the parent role (`starInHtml: false`, no star endpoints). Dropped per

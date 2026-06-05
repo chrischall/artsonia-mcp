@@ -128,6 +128,8 @@ export interface ArtworkDetail {
   title: string;
   artist_screen_name: string;
   views: number | null;
+  /** Grade the artwork was created in, e.g. "6" (from "created by … in Grade 6"). */
+  grade: string | null;
   project: string;
   comment_entry: { artist_id: string; artwork_id: string } | null;
   // NOTE: comment-item markup is UNVERIFIED — 0-comment accounts show no comment elements.
@@ -151,9 +153,10 @@ export function parseArtwork(html: string): ArtworkDetail {
     if (m) { views = Number(m[1]); break; }
   }
 
-  // project from body text: `from school project "<Project>"`
+  // project + grade from body text: `created by <name> in Grade <N> … from school project "<Project>"`
   const bodyText = root.querySelector('body')?.text ?? '';
   const project = bodyText.match(/from school project "([^"]+)"/)?.[1] ?? '';
+  const grade = bodyText.match(/in Grade\s+(\w+)/i)?.[1] ?? null;
 
   // comment entry link
   const link = root.querySelector('a[href*="comments/enter.asp"]');
@@ -171,7 +174,13 @@ export function parseArtwork(html: string): ArtworkDetail {
     text: text(c.querySelector('.comment-text')),
   }));
 
-  return { title, artist_screen_name, views, project, comment_entry, comments };
+  return { title, artist_screen_name, views, grade, project, comment_entry, comments };
+}
+
+/** CDN image URL for an artwork at a given resolution (public — no auth needed). */
+export type ArtworkResolution = 'full' | 'xlarge' | 'large' | 'medium' | 'small';
+export function artworkImageUrl(artworkId: string, resolution: ArtworkResolution = 'full'): string {
+  return `https://images.artsonia.com/art/${resolution}/${artworkId}.jpg`;
 }
 
 export interface Fan { name: string; relationship: string; }
