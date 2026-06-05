@@ -90,3 +90,68 @@ Identifiers:
 - No star/applause/favorite control or endpoint exists on the artwork page
   for the parent role (`starInHtml: false`, no star endpoints). Dropped per
   the verify-then-ship rule.
+
+## Real DOM structures (verified live 2026-06-05 — parser selectors)
+
+Top-level selectors confirmed during recon; these are the **inner** structures
+(initial synthetic fixtures guessed these wrong — corrected here).
+
+### Dashboard `/members/`
+- **Students:** `.artist-card` (one per child). Inside:
+  - name → first `a.lightlink` (text, e.g. "Finn Hall").
+  - school/grade → a child `<div>` whose text is `Currently at <School> (Grade <N>)`.
+  - stats → `.stats-container .stat` divs, each text `"<n> <label>"` where label ∈
+    {artworks, fans, comments, feedback, awards}; some `.stat` also carry
+    `.stat-inactive`.
+- **Notifications:** heading `.textSubhead` with text `Notifications (N)` (count in
+  the parens). Items are `div.notice` (NOT `a.notice`). Inside a `.notice`:
+  title → `a.lightlink` (text + href); body → the sibling `<div>` after the
+  title block.
+
+### Portfolio `/artists/portfolio.asp?id=<artistId>`
+- Artwork tiles are `.grid-item` elements **that contain an `a[href*="art.asp"]`**
+  (the first `.grid-item` is a non-artwork section header with the school name +
+  count — it has no art link, so the "must contain an art.asp link" filter drops
+  it). artwork_id from `art.asp?id=`.
+- **No artwork title at the tile level** (link `title`/img `alt` are null; tile
+  textLabels are just "grade N" and a comment count). Thumbnail is derivable:
+  `https://images.artsonia.com/art/small/<artworkId>.jpg`.
+- Private pieces: a `.textLabel.private-art` label (class contains `private-art`).
+
+### Artwork detail `/museum/art.asp?id=<artworkId>`
+- title + screen-name → from `<title>`: `... "<Title>" by <ScreenName>`.
+- views → a `.textNormal` whose text is `"<n> artwork views"`.
+- "created by <ScreenName> in Grade <N> at <School>" → a `.textNormal` block.
+- project/assignment → a block `from school project "<Project>"` (closest thing
+  to a description; these artworks have no free-text artist statement).
+- comment entry link → `a[href*="comments/enter.asp"]`.
+- **Comments list: UNVERIFIED.** Both this account's children have 0 comments, so
+  no comment-list markup is observable here. When 0 comments, `[class*="comment"]`
+  matches nothing (only the "Comment on …" link exists). The comment-item
+  structure must be confirmed against an artwork that actually has comments before
+  the comments parser is trusted.
+
+### Fan club `/members/fanclub/?artist=<artistId>`
+- `.fan-card` (one per fan). Inside: name → first `a.hiddenlink` (text);
+  relationship → a `<div>` whose own-text is the relationship (e.g. "Father"); the
+  card also contains a `<b>Registered</b>` marker and the fan's email — do NOT
+  surface the email in tool output unless intended.
+
+## Live write verification (executed 2026-06-05 against the real account)
+
+- **`set_notifications` ✅ confirmed** — but only after a fix the live run forced:
+  the opt-in checkboxes submit **`value="Y"`** (a literal `on` is silently
+  ignored — the save 302s but persists nothing), and `DidChangePassword` is
+  **`"N"`** (not `"0"`). The tool now captures each checkbox's real value and
+  re-sends `DidChangePassword` verbatim. Verified: a toggle persists and
+  re-reads back; FirstName/EmailAddress are untouched. **The 302 alone is NOT
+  proof of success on this form** — re-read to confirm.
+- **`invite_fan` ✅ confirmed** — POST created a real pending fan (showed up in
+  the fan club with the test `@example.com` email). The assumed `MemberType=fan`
+  is correct.
+- **`post_comment` ⚠️ submitted, not positively confirmed** — the POST is
+  accepted and 302s to a content page (`/schools/school.asp`), not a form bounce,
+  but the comment does **not** appear on the public artwork page or the parent
+  comments view. Most likely **held for teacher moderation** (standard for K-12
+  parent comments). Could not be confirmed from the parent side. Treat
+  `posted:true` as "submitted/pending," not "publicly visible."
