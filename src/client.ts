@@ -8,7 +8,7 @@ const LOGIN_RE = /\/members\/login\.asp/i;
 const LOGIN_BODY_RE = /You need to log in|Parent \(or Fan\) Login/i;
 
 function looksUnauthenticated(res: ArtsoniaResponse): boolean {
-  return LOGIN_RE.test(res.url) || LOGIN_BODY_RE.test(res.body);
+  return LOGIN_RE.test(res.url) || LOGIN_BODY_RE.test(res.body) || (res.location ? LOGIN_RE.test(res.location) : false);
 }
 
 export interface ArtsoniaClientOptions {

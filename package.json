@@ -8,6 +8,7 @@
   "license": "MIT",
   "keywords": ["mcp", "model-context-protocol", "claude", "ai", "artsonia", "student-art", "portfolio", "parent"],
   "type": "module",
+  "engines": { "node": ">=18.14" },
   "bin": { "artsonia-mcp": "dist/index.js" },
   "files": ["dist", ".claude-plugin", "skills", ".mcp.json", "server.json", "manifest.json"],
   "scripts": {

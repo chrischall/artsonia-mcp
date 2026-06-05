@@ -53,4 +53,23 @@ describe('ArtsoniaClient.fetchHtml', () => {
     expect(post.headers?.Cookie).toBe('SID=good');
     expect(post.body).toBe('Comment=hi');
   });
+
+  it('write() triggers re-login and retries when first response is 302 to login via Location header', async () => {
+    // Simulates a mid-write session expiry: the POST returns 302 with Location: /members/login.asp
+    // and empty body, url = the original request path (not the login URL), so only the Location
+    // header reveals the session has expired.
+    const t = scriptedTransport([
+      loginOk,
+      () => ({ status: 302, body: '', url: 'https://www.artsonia.com/museum/enter.asp?artist=1&art=2', setCookie: [], location: '/members/login.asp' }),
+      loginOk,
+      () => ({ status: 302, body: '', url: 'https://www.artsonia.com/members/', setCookie: [], location: '/members/' }),
+    ]);
+    const res = await makeClient(t).write('/museum/enter.asp?artist=1&art=2', 'Comment=hi');
+    // Two login POSTs should have been issued (initial + re-login)
+    const loginCalls = t.calls.filter((c) => c.path === '/members/login.asp');
+    expect(loginCalls.length).toBe(2);
+    // The final response is the successful redirect (not the login redirect)
+    expect(res.status).toBe(302);
+    expect(res.location).toBe('/members/');
+  });
 });

@@ -25,7 +25,7 @@ export function registerHealthcheckTools(server: McpServer, client: ArtsoniaClie
         });
       } catch (e) {
         const msg = messageOf(e);
-        const noCreds = /ARTSONIA_USERNAME|ARTSONIA_PASSWORD/.test(msg);
+        const noCreds = /environment variables are required/.test(msg);
         return textResult({
           ok: false,
           authenticated: false,
