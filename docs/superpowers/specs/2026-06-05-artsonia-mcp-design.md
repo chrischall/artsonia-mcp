@@ -1,26 +1,33 @@
 # artsonia-mcp — Design
 
 **Date:** 2026-06-05
-**Status:** Approved; endpoints verified live (see `docs/ARTSONIA-API.md`)
-**Archetype:** fetchproxy / browser-bridge (copy from `zillow-mcp`)
+**Status:** Approved; auth + endpoints verified live (see `docs/ARTSONIA-API.md`)
+**Archetype:** cookie-session direct-fetch (bearer-like), **fetchproxy optional fallback**
 
-> **Verified 2026-06-05** against a signed-in parent session. Artsonia is a
-> **classic server-rendered jQuery `.asp` site** — NOT an SPA/JSON-store site.
-> Data lives in the server-rendered HTML, so parsing uses `node-html-parser`
-> (not JSON-store decoding). No Cloudflare interstitial. Every form is authed
-> by the session cookie alone — **no CSRF / `__VIEWSTATE` token**. Concrete
-> paths/fields for every tool are in `docs/ARTSONIA-API.md`.
+> **Verified 2026-06-05** against a real login + signed-in parent session.
+> Artsonia is a **classic server-rendered jQuery `.asp` site** — NOT an
+> SPA/JSON-store site. Data lives in the server-rendered HTML, so parsing uses
+> `node-html-parser` (not JSON-store decoding). No Cloudflare interstitial.
+> **Auth is a username/password form POST that returns an HttpOnly session
+> cookie** (`POST /members/login.asp`, `Username/Password/TargetUrl/Action=login`)
+> — so the MCP logs in directly and rides a server-side cookie jar; **the
+> browser bridge is not needed** for the common case. Every form is authed by
+> the session cookie alone — **no CSRF / `__VIEWSTATE` token**. Concrete
+> paths/fields for every tool (and the login flow) are in `docs/ARTSONIA-API.md`.
 
 ## Purpose
 
 An MCP server that exposes a **parent/fan's** signed-in Artsonia
 (`https://www.artsonia.com/members/`) account to an agent: view the
 student(s) you follow, their portfolios and artwork, comments, activity, and
-fan list — plus a small set of confirm-gated write actions (post a comment;
-and, only once verified, star artwork / invite a fan / set notifications).
+fan list — plus a small set of confirm-gated write actions (post a comment,
+invite a fan, set notification preferences).
 
-Artsonia has no public API and the members area is a signed-in SPA, so every
-request rides the user's signed-in browser tab via `@fetchproxy/server`.
+Artsonia has no public API, but it does accept a direct username/password
+login that yields an HttpOnly session cookie — so the MCP logs in server-side
+(credentials from env) and talks to the site with a cookie jar over plain
+`fetch`, parsing the server-rendered HTML. The browser bridge (`@fetchproxy/
+server`) is retained only as an optional fallback.
 
 ## Scope
 
@@ -45,22 +52,34 @@ request rides the user's signed-in browser tab via `@fetchproxy/server`.
 
 ## Architecture
 
-Fetchproxy archetype on the **shared fleet port `37149`** (`DEFAULT_PORT =
-37_149`; env override `ARTSONIA_WS_PORT`). Copy `zillow-mcp`'s skeleton.
+**Cookie-session direct-fetch** (closest fleet archetype: the bearer/direct-API
+cohort like splitwise, but with a cookie jar instead of a bearer header).
+fetchproxy is retained as an **optional fallback transport**, not the default.
 
-- `src/transport.ts` — `ArtsoniaTransport` interface (`{status, body, url}`
-  round-trip; `BridgeStatus` alias of `@chrischall/mcp-utils/fetchproxy`
-  `BridgeHealth`).
-- `src/transport-fetchproxy.ts` — the **one** place that constructs
-  `FetchproxyServer`. `domains: ['artsonia.com']` (apex-vs-`www` verified live
-  during build), `capabilities: ['fetch']`. Direct import of
-  `@fetchproxy/server` (so the transport spec can mock its constructor).
-- `src/client.ts` — `ArtsoniaClient` over any `ArtsoniaTransport`:
-  - `fetchHtml(path)` / `fetchJson(path)` for reads.
-  - **One central `write()`** that attaches auth (browser carries the session
-    cookie; CSRF token, if any, extracted from the page/store) — every mutation
-    routes through it.
-  - Deferred-config-error style: construct without throwing; surface bridge/auth
+- `src/transport.ts` — `ArtsoniaTransport` interface: `request({method, path,
+  headers, body})` → `{status, body, url, setCookie}`. Two implementations:
+  - `src/transport-fetch.ts` (**default**) — node `fetch` with
+    `redirect: 'manual'` (so login 302s and session-expiry redirects are
+    observable), attaching the cookie jar; base `https://www.artsonia.com`.
+  - `src/transport-fetchproxy.ts` (**optional**) — wraps `FetchproxyServer` on
+    the shared port `37149` (`DEFAULT_PORT = 37_149`, env `ARTSONIA_WS_PORT`),
+    `domains: ['artsonia.com']`. Only engaged when `ARTSONIA_TRANSPORT=fetchproxy`
+    (or a future wall forces it). Direct import of `@fetchproxy/server` so the
+    transport spec can mock its constructor.
+- `src/auth.ts` — `AuthManager`: reads `ARTSONIA_USERNAME` / `ARTSONIA_PASSWORD`
+  (deferred-config-error). `login()` POSTs the verified form to
+  `/members/login.asp`, captures all `Set-Cookie`s into a `CookieJar`, persists
+  via `SessionStore` (`@chrischall/mcp-utils/session`, 0600). Race-safe
+  single-flight re-login (`TokenManager`) on session expiry. **Never logs
+  credentials or cookie values.** Carries a `SERVER_VERSION`
+  `// x-release-please-version` marker (release-please extra-file).
+- `src/cookies.ts` — minimal cookie jar (parse `Set-Cookie`, serialize `Cookie`
+  header). Reuse `parseCookieJar` from `@chrischall/mcp-utils/http` where it fits.
+- `src/client.ts` — `ArtsoniaClient` over any `ArtsoniaTransport` + `AuthManager`:
+  - `fetchHtml(path)` for reads (auto re-login on login-redirect, one retry).
+  - **One central `write()`** that ensures a live session and POSTs
+    form-urlencoded bodies — every mutation routes through it.
+  - Deferred-config-error style: construct without throwing; surface auth/config
     errors at first tool call. Constructed in the **caller** (`index.ts`).
   - Error mapping lives here (see Error handling).
 - `src/parse.ts` — parse the **server-rendered HTML** with `node-html-parser`
@@ -74,11 +93,11 @@ Fetchproxy archetype on the **shared fleet port `37149`** (`DEFAULT_PORT =
 ## Tools
 
 **Infra**
-- `artsonia_healthcheck` — round-trip a small public artsonia.com URL through
-  the bridge; returns role/port/version + a plain-English hint isolating
-  bridge vs extension vs site failures. Read-only.
-- `artsonia_sessions` — list/select the active signed-in account (meaningful
-  only with >1 account).
+- `artsonia_healthcheck` — verify auth + connectivity end-to-end: confirm
+  credentials are configured, perform/refresh login, fetch `/members/`, and
+  report `{authenticated, transport: fetch|fetchproxy, student_count}` with a
+  plain-English hint isolating "no creds" vs "bad creds / login failed" vs
+  "site/transport error". Read-only.
 
 **Reads**
 - `artsonia_list_students` — the followed student(s) → ids + portfolio handles
@@ -100,20 +119,24 @@ no network call, return dry-run `preview()`; all via `client.write()`):
 
 ## Data flow
 
-tool → `client.fetchHtml/fetchJson(path)` → `ArtsoniaTransport.request` →
-fetchproxy bridge → signed-in tab → SSR HTML/JSON → store parser →
-`textResult(data)`. Writes prepend the `confirm` gate + `client.write()` auth.
+tool → `client.fetchHtml(path)` → `AuthManager` ensures a live cookie session
+(login if needed) → `ArtsoniaTransport.request` (default: node `fetch` + cookie
+jar) → server-rendered HTML → `parse.ts` → `textResult(data)`. On a login
+redirect the client re-logs-in once and retries. Writes prepend the `confirm`
+gate + `client.write()` (form-urlencoded POST through the same session).
 
 ## Error handling
 
 Typed `McpToolError` subclasses with actionable `hint`:
-- `SessionNotAuthenticatedError` — login-redirect / sign-in interstitial.
-- `BotWallError` — via shared `classifyBotWall`. No Cloudflare interstitial
-  was observed in recon, so this is defensive only; if one ever appears, detect
-  by **definitive markers only** (`_cf_chl_opt`, `<title>Just a moment`) —
-  never `cdn-cgi/challenge-platform` or body-size gating.
-- Bridge failures surfaced via `artsonia_healthcheck` hints (bridge_down /
-  timeout / protocol).
+- config missing → deferred-config error: "set `ARTSONIA_USERNAME` /
+  `ARTSONIA_PASSWORD`".
+- `SessionNotAuthenticatedError` — login POST failed (bad creds) or a
+  mid-session redirect back to `/members/login.asp` that re-login didn't clear.
+- `BotWallError` — via shared `classifyBotWall`. No Cloudflare interstitial was
+  observed; defensive only. If one ever appears, detect by **definitive markers
+  only** (`_cf_chl_opt`, `<title>Just a moment`) — never
+  `cdn-cgi/challenge-platform` or body-size gating — and that's the signal to
+  flip `ARTSONIA_TRANSPORT=fetchproxy`.
 - All error bodies through `truncateErrorMessage` (redacts Bearer/JWT, caps).
 
 ## Endpoint verification
@@ -128,9 +151,11 @@ secret-scan before every commit.
 
 ## Testing
 
-vitest, **no real network** (mock the transport/bridge). TDD throughout,
-especially writes (failing test → minimal code → green). `versionSyncTest`
-from `@chrischall/mcp-utils/test`. `createTestHarness` + `parseToolResult`.
+vitest, **no real network** (inject a fake `ArtsoniaTransport`; assert the
+login POST body/shape and parser output against raw-HTML fixtures). TDD
+throughout, especially auth + writes (failing test → minimal code → green).
+`versionSyncTest` from `@chrischall/mcp-utils/test` (covers `src/index.ts` AND
+`src/auth.ts` `SERVER_VERSION`). `createTestHarness` + `parseToolResult`.
 
 ## Packaging & release
 
@@ -153,11 +178,23 @@ from `@chrischall/mcp-utils/test`. `createTestHarness` + `parseToolResult`.
 **Secrets are set by the human** (`CLAUDE_CODE_OAUTH_TOKEN`, `RELEASE_PAT`,
 optional `CLAWHUB_TOKEN`, npm trusted publishing) — never by the agent.
 
+## Configuration (env)
+
+- `ARTSONIA_USERNAME`, `ARTSONIA_PASSWORD` — **required** (parent/fan login).
+  Read via `readEnvVar`; missing → deferred-config error at first tool call.
+- `ARTSONIA_TRANSPORT` — `fetch` (default) | `fetchproxy`.
+- `ARTSONIA_WS_PORT` — fetchproxy port override (default `37149`); only used
+  when transport is `fetchproxy`.
+- `.env` gitignored; real creds live in `.env` (local) or the host's
+  `mcp_config.env`. Session cookie jar persisted via `SessionStore` (0600).
+
 ## Dependencies
 
 `@chrischall/mcp-utils@^0.5.0`, `@fetchproxy/server@^1.2.0`,
-`@modelcontextprotocol/sdk@^1.29.0`, `zod@^4.4.3`. ESM + NodeNext (relative
-imports end in `.js`); `"types": ["node"]` in tsconfig.
+`@modelcontextprotocol/sdk@^1.29.0`, `node-html-parser@^7`, `zod@^4.4.3`.
+ESM + NodeNext (relative imports end in `.js`); `"types": ["node"]` in tsconfig.
+`@fetchproxy/server` stays a dependency (optional-fallback transport), so the
+`@chrischall/mcp-utils/fetchproxy` subpath remains available.
 
 ## Conventions reaffirmed
 

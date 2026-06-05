@@ -10,6 +10,31 @@ the MCP parses HTML with `node-html-parser`. No Cloudflare interstitial
 observed. Auth is the session cookie carried by the browser; **no CSRF /
 `__VIEWSTATE` token** on any form.
 
+## Authentication — username/password (verified live 2026-06-05)
+
+Primary auth is a **server-side cookie-session login** — no browser bridge
+needed (no Cloudflare wall). Verified by capturing a real login:
+
+- Login form `LoginForm` at GET `/members/login.asp?url=<dest>&login=y` with
+  inputs `Username` (email), `Password`, `TargetUrl` (hidden), `Action`
+  (hidden). The `Username`/`Password` inputs are JS-injected (absent from the
+  bare HTML), but the submit is a **plain synchronous form POST — no AJAX**:
+  - **`POST /members/login.asp`**, `Content-Type: x-www-form-urlencoded`
+  - Body: **`Username=<email>&Password=<password>&TargetUrl=/members/&Action=login`**
+  - Response: **302 redirect** to `TargetUrl` + **`Set-Cookie` session cookie
+    (HttpOnly)**. No CSRF token.
+- The client stores ALL cookies from the login response in a cookie jar and
+  sends them on every subsequent request. Session expiry is detected by a
+  redirect back to `/members/login.asp` (→ re-login).
+- A remembered-account **`restore`** flow exists (`Action=restore` with
+  `UserToken`/`UserID`, no password) — not used by the MCP; we always do a
+  fresh `Action=login`.
+- `magic-link` (passwordless email) also exists — not used.
+
+**fetchproxy is an optional fallback only** (kept available for any future
+endpoint that needs the real browser); the default transport is direct
+`fetch` with the cookie jar.
+
 Identifiers:
 - **artistId** (a child/student), e.g. `16011097` (Finn), `13447141` (Lucas).
   Source: `portfolio.asp?id=<artistId>` and `?artist=<artistId>` params.
