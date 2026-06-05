@@ -1,0 +1,21 @@
+{
+  "name": "artsonia-mcp",
+  "displayName": "Artsonia",
+  "version": "0.1.0",
+  "description": "MCP server for Artsonia — natural-language access to student-art portfolios, comments, and fans",
+  "author": {
+    "name": "Chris Hall",
+    "email": "chris.c.hall@gmail.com"
+  },
+  "homepage": "https://github.com/chrischall/artsonia-mcp",
+  "repository": "https://github.com/chrischall/artsonia-mcp",
+  "license": "MIT",
+  "keywords": [
+    "artsonia",
+    "student-art",
+    "mcp",
+    "parent"
+  ],
+  "skills": "./skills/artsonia-mcp/SKILL.md",
+  "mcp": "./.mcp.json"
+}

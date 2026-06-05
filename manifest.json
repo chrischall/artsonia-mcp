@@ -1,0 +1,115 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/dxt/main/dist/mcpb-manifest.schema.json",
+  "manifest_version": "0.3",
+  "name": "artsonia-mcp",
+  "display_name": "Artsonia",
+  "version": "0.1.0",
+  "description": "Artsonia student-art portfolios, comments, and fans for Claude — access via natural language",
+  "author": {
+    "name": "Chris Chall",
+    "email": "chris.c.hall@gmail.com",
+    "url": "https://github.com/chrischall"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrischall/artsonia-mcp"
+  },
+  "homepage": "https://github.com/chrischall/artsonia-mcp",
+  "support": "https://github.com/chrischall/artsonia-mcp/issues",
+  "license": "MIT",
+  "keywords": [
+    "artsonia",
+    "student-art",
+    "portfolio",
+    "parent",
+    "kids"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/bundle.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/bundle.js"
+      ],
+      "env": {
+        "ARTSONIA_USERNAME": "${user_config.artsonia_username}",
+        "ARTSONIA_PASSWORD": "${user_config.artsonia_password}"
+      }
+    }
+  },
+  "user_config": {
+    "artsonia_username": {
+      "type": "string",
+      "title": "Artsonia Username",
+      "description": "Your Artsonia login email address",
+      "required": true,
+      "sensitive": false
+    },
+    "artsonia_password": {
+      "type": "string",
+      "title": "Artsonia Password",
+      "description": "Your Artsonia account password",
+      "required": true,
+      "sensitive": true
+    },
+    "artsonia_transport": {
+      "type": "string",
+      "title": "Transport (optional)",
+      "description": "Override transport mode: 'stdio' (default), 'sse', or 'fetchproxy'",
+      "required": false,
+      "sensitive": false
+    }
+  },
+  "tools": [
+    {
+      "name": "artsonia_healthcheck",
+      "description": "Check connectivity and authentication status"
+    },
+    {
+      "name": "artsonia_list_students",
+      "description": "List all students linked to the account"
+    },
+    {
+      "name": "artsonia_get_activity",
+      "description": "Get recent activity feed for a student"
+    },
+    {
+      "name": "artsonia_get_portfolio",
+      "description": "Get a student's art portfolio"
+    },
+    {
+      "name": "artsonia_get_artwork",
+      "description": "Get details for a single artwork"
+    },
+    {
+      "name": "artsonia_list_comments",
+      "description": "List comments on an artwork"
+    },
+    {
+      "name": "artsonia_get_fans",
+      "description": "Get the fan list for a student"
+    },
+    {
+      "name": "artsonia_post_comment",
+      "description": "Post a comment on an artwork"
+    },
+    {
+      "name": "artsonia_invite_fan",
+      "description": "Invite someone to become a fan of a student"
+    },
+    {
+      "name": "artsonia_set_notifications",
+      "description": "Update notification preferences for a student"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32"
+    ],
+    "runtimes": {
+      "node": ">=22.5"
+    }
+  }
+}

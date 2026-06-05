@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "artsonia": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"],
+      "env": {
+        "ARTSONIA_USERNAME": "${ARTSONIA_USERNAME}",
+        "ARTSONIA_PASSWORD": "${ARTSONIA_PASSWORD}"
+      }
+    }
+  }
+}

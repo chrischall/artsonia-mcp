@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.chrischall/artsonia-mcp",
+  "description": "Parent/fan access to Artsonia student-art portfolios, comments, and fans (AI-built).",
+  "repository": {
+    "url": "https://github.com/chrischall/artsonia-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "artsonia-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ARTSONIA_USERNAME",
+          "description": "Your Artsonia login email address",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ARTSONIA_PASSWORD",
+          "description": "Your Artsonia account password",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
