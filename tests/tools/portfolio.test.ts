@@ -27,6 +27,8 @@ describe('portfolio tools', () => {
     const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
     expect(mockFetchHtml).toHaveBeenCalledWith('/artists/portfolio.asp?id=13447141');
     expect(out.artworks).toHaveLength(2);
+    expect(out.artworks[0].artwork_id).toBe('150567537');
+    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/150567537.jpg');
     expect(out.artworks[1].is_private).toBe(true);
   });
   it('get_artwork fetches /museum/art.asp?id=<artwork_id> and parses detail', async () => {
@@ -34,12 +36,14 @@ describe('portfolio tools', () => {
     const out = parse(await harness.callTool('artsonia_get_artwork', { artwork_id: '150567537' }));
     expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=150567537');
     expect(out.title).toBe('My silhouette still life');
+    expect(out.project).toBe('6th Grade Silhouette Still Life');
     expect(out.comment_entry.artist_id).toBe('13447141');
   });
   it('list_comments returns the comments array from the artwork page', async () => {
     mockFetchHtml.mockResolvedValue(artwork);
     const out = parse(await harness.callTool('artsonia_list_comments', { artwork_id: '150567537' }));
-    expect(out.comments[0].author).toBe('Grandma');
+    // comments markup is UNVERIFIED for non-zero; fixture has 0 comments
+    expect(Array.isArray(out.comments)).toBe(true);
   });
   it('get_portfolio rejects a non-numeric artist_id', async () => {
     const result = await harness.callTool('artsonia_get_portfolio', { artist_id: 'abc' });

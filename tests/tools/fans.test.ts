@@ -22,6 +22,7 @@ describe('fan tools', () => {
     const out = parse(await harness.callTool('artsonia_get_fans', { artist_id: '13447141' }));
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/fanclub/?artist=13447141');
     expect(out.fans).toHaveLength(2);
-    expect(out.fans[1].relationship).toBe('Grandparent');
+    expect(out.fans[0]).toMatchObject({ name: 'Chris Hall', relationship: 'Father' });
+    expect(out.fans[1]).toMatchObject({ name: 'Grandma Jo', relationship: 'Grandparent' });
   });
 });

@@ -11,7 +11,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     'artsonia_get_portfolio',
     {
       title: "Get a student's portfolio",
-      description: "List a student's artworks (artwork_id, title, private flag, thumbnail). Pass the artist_id from artsonia_list_students.",
+      description: "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students.",
       annotations: toolAnnotations({ title: "Get a student's portfolio", openWorld: true }),
       inputSchema: { artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).') },
     },
@@ -21,7 +21,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     'artsonia_get_artwork',
     {
       title: 'Get artwork detail',
-      description: 'Get one artwork: title, artist screen-name, view count, description, and the comments on it. Pass an artwork_id from a portfolio.',
+      description: 'Get one artwork: title, artist screen-name, view count, project (assignment name), and the comments on it. Pass an artwork_id from a portfolio.',
       annotations: toolAnnotations({ title: 'Get artwork detail', openWorld: true }),
       inputSchema: { artwork_id: NumericId.describe('Artwork id (from artsonia_get_portfolio).') },
     },

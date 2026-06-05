@@ -28,6 +28,8 @@ describe('student tools', () => {
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/');
     expect(out.students).toHaveLength(2);
     expect(out.students[0].artist_id).toBe('16011097');
+    expect(out.students[0].name).toBe('Finn Hall');
+    expect(out.students[0].artwork_count).toBe(46);
   });
   it('artsonia_get_activity returns notifications', async () => {
     mockFetchHtml.mockResolvedValue(dashboard);
