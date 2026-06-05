@@ -52,6 +52,8 @@ Identifiers:
 | list_comments | `/members/comments/?artist=<artistId>` | comments list (empty state when 0) |
 | get_fans | `/members/fanclub/?artist=<artistId>` | `.fan-card` / `.fan-row` → fan name, relationship |
 | get_feedback | `/members/feedback/?artist=<artistId>` | `.comment-row` → `.comment` (message), `.commenter` (who/when), `.comment-art a` (artwork), `.comment-options` "not been marked as read" (unread flag) |
+| get_awards | `/artists/awards.asp?id=<artistId>` | `.award-card` (current: name / "Earned"\|"Not earned" / criteria / progress) + `.award-card-past` (past-year badge icons; name from `artist_<x>.gif`) |
+| get_profile | `/members/profile/` | `#TheForm` read: FirstName/LastName/EmailAddress/MobileNumber + opt-in checkbox states (read-only complement to set_notifications) |
 
 ## Writes (POST, `application/x-www-form-urlencoded`, session-cookie auth, no CSRF)
 

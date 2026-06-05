@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseStudents, parseNotifications, parsePortfolio, parseArtwork, parseFans, parseFeedback } from '../src/parse.js';
+import { parseStudents, parseNotifications, parsePortfolio, parseArtwork, parseFans, parseFeedback, parseAwards, parseProfile } from '../src/parse.js';
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const fx = (name: string) => readFileSync(join(FIX, name), 'utf8');
@@ -87,5 +87,32 @@ describe('parseFeedback', () => {
     });
     expect(fb[0].posted_by).toContain('Curt Atkins');
     expect(fb[1]).toMatchObject({ artwork_id: '148945137', is_read: true });
+  });
+});
+
+describe('parseAwards', () => {
+  it('parses current-year badges (earned vs not) and past-year badges', () => {
+    const awards = parseAwards(fx('awards.html'));
+    const current = awards.filter((a) => a.period === 'current');
+    const past = awards.filter((a) => a.period === 'past');
+    expect(current).toHaveLength(2);
+    expect(current[0]).toMatchObject({ name: 'Portfolio', earned: true, description: 'Publish three or more artworks this year.', progress: '12 artworks this year' });
+    expect(current[1]).toMatchObject({ name: 'Popular Artist', earned: false }); // "Not earned" → false
+    expect(past).toHaveLength(2);
+    expect(past[0]).toMatchObject({ name: 'Portfolio', earned: true, period: 'past' });
+    expect(awards.filter((a) => a.earned)).toHaveLength(3); // 1 current + 2 past
+  });
+});
+
+describe('parseProfile', () => {
+  it('reads name/email/mobile and opt-in states from the profile form', () => {
+    const p = parseProfile(fx('profile.html'));
+    expect(p).toMatchObject({
+      first_name: 'Chris',
+      last_name: 'Hall',
+      email: 'chris@example.com',
+      mobile: '5550001234',
+      opt_ins: { news: false, artist_activity: true, promos: false },
+    });
   });
 });
