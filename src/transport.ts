@@ -24,6 +24,14 @@ export interface ArtsoniaResponse {
 
 export interface ArtsoniaTransport {
   request(req: ArtsoniaRequest): Promise<ArtsoniaResponse>;
+  /**
+   * True when the transport rides the user's already-signed-in browser tab
+   * (fetchproxy), so the browser carries the session and the server-side
+   * username/password login MUST be skipped — there is no server jar to fill,
+   * and `doLogin`'s 302+Location success marker never appears (the browser
+   * follows the redirect itself). Absent/false ⇒ the server owns the session.
+   */
+  readonly usesBrowserSession?: boolean;
 }
 
 export const ARTSONIA_ORIGIN = 'https://www.artsonia.com';
