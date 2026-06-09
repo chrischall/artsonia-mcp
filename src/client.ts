@@ -37,6 +37,28 @@ export class ArtsoniaClient {
   }
 
   private async requestWithSession(method: 'GET' | 'POST', path: string, body?: string): Promise<ArtsoniaResponse> {
+    // fetchproxy transport mode: the request rides the user's already-signed-in
+    // browser tab, which carries the session. The server-side username/password
+    // login does NOT apply (no jar to fill, and doLogin's 302+Location success
+    // marker never appears — the browser follows the redirect itself, so
+    // ensureLogin would always throw "Artsonia login failed"). Send straight
+    // through; if the browser isn't signed in, the response looks like the login
+    // page and we surface a browser-specific hint instead of a credential one.
+    if (this.transport.usesBrowserSession) {
+      const res = await this.send(method, path, body);
+      if (looksUnauthenticated(res)) {
+        throw new McpToolError('Not signed in to Artsonia in your browser.', {
+          hint: 'fetchproxy mode uses your signed-in browser session — no ARTSONIA_USERNAME/PASSWORD needed. Open www.artsonia.com in the bridged browser tab and sign in, then retry.',
+        });
+      }
+      if (res.status >= 400) {
+        throw new McpToolError(`Artsonia request failed: ${method} ${path} -> HTTP ${res.status}`, {
+          hint: 'Retry; if it persists the page may have moved or requires a different account.',
+        });
+      }
+      return res;
+    }
+
     await this.auth.ensureLogin();
     let res = await this.send(method, path, body);
     if (looksUnauthenticated(res)) {
@@ -65,7 +87,10 @@ export class ArtsoniaClient {
   }
 
   private send(method: 'GET' | 'POST', path: string, body?: string): Promise<ArtsoniaResponse> {
-    const headers: Record<string, string> = { Cookie: this.auth.cookieHeader() };
+    const headers: Record<string, string> = {};
+    // In browser-session (fetchproxy) mode the tab carries its own cookies; the
+    // server jar is empty, so don't override the browser's Cookie header.
+    if (!this.transport.usesBrowserSession) headers.Cookie = this.auth.cookieHeader();
     if (method === 'POST') headers['Content-Type'] = 'application/x-www-form-urlencoded';
     return this.transport.request({ method, path, headers, body, redirect: method === 'POST' ? 'manual' : 'follow' });
   }

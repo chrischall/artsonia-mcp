@@ -69,7 +69,17 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       if (confirm !== true) return previewResult('post_comment', { path, Comment: comment });
       const body = new URLSearchParams({ Comment: comment }).toString();
       const res = await client.write(path, body);
-      return textResult({ posted: true, artist_id, artwork_id, status: res.status });
+      // A 3xx only means Artsonia accepted the POST — not that the comment was
+      // persisted (it 302s even on payloads it silently drops), and there is no
+      // cheap per-comment re-read to confirm. Report honestly.
+      return textResult({
+        submitted: true,
+        verified: false,
+        note: 'Artsonia accepted the comment (HTTP ' + res.status + '), but this server cannot confirm it persisted. Check the artwork page to verify.',
+        artist_id,
+        artwork_id,
+        status: res.status,
+      });
     },
   );
 
@@ -104,7 +114,15 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         return previewResult('invite_fan', { path, ...Object.fromEntries(params) }, 'Verify RelationshipID against the live Add Fans form; MemberType is assumed "fan".');
       }
       const res = await client.write(path, params.toString());
-      return textResult({ invited: true, artist_id, email, status: res.status });
+      // 3xx ⇒ accepted, not confirmed-sent; no cheap re-read for a pending invite.
+      return textResult({
+        submitted: true,
+        verified: false,
+        note: 'Artsonia accepted the invite (HTTP ' + res.status + '), but this server cannot confirm the email was sent. Ask the fan to check their inbox.',
+        artist_id,
+        email,
+        status: res.status,
+      });
     },
   );
 
@@ -154,7 +172,31 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         return previewResult('set_notifications', { ...resultingOptIns }, 'Re-sends your full profile (name/email preserved, password blanked) to flip only the opt-in(s).');
       }
       const res = await client.write('/members/profile/default.asp', params.toString());
-      return textResult({ updated: true, optIns: resultingOptIns, status: res.status });
+      // Artsonia 302s on a subtly-wrong payload but persists NOTHING, so a 3xx
+      // is not proof of success. Re-read the profile and confirm the opt-ins
+      // actually flipped before claiming the change stuck.
+      const after = parseProfileForm(await client.fetchHtml('/members/profile/'));
+      const persisted = {
+        OptInNews: after.checkboxes['OptInNews'] ?? false,
+        OptInArtistActivity: after.checkboxes['OptInArtistActivity'] ?? false,
+        OptInPromos: after.checkboxes['OptInPromos'] ?? false,
+      };
+      const verified =
+        persisted.OptInNews === resultingOptIns.OptInNews &&
+        persisted.OptInArtistActivity === resultingOptIns.OptInArtistActivity &&
+        persisted.OptInPromos === resultingOptIns.OptInPromos;
+      return textResult({
+        updated: verified,
+        verified,
+        optIns: persisted,
+        status: res.status,
+        ...(verified
+          ? {}
+          : {
+              note: 'Artsonia accepted the request (3xx) but a re-read shows the opt-ins did not change — the save did not persist. Re-check the form fields and retry.',
+              requested: resultingOptIns,
+            }),
+      });
     },
   );
 }

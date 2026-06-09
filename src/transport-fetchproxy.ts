@@ -16,6 +16,8 @@ const DEFAULT_PORT = 37_149; // shared fleet port — do NOT change
 // fetchproxy. Cookies are carried by the browser, so the AuthManager's jar is
 // unused in this mode; login is whatever the browser already holds.
 export class FetchproxyArtsoniaTransport implements ArtsoniaTransport {
+  /** The browser tab carries the session — never run the server-side login. */
+  readonly usesBrowserSession = true;
   private inner: FetchproxyServer | null = null;
   private started = false;
   private starting: Promise<void> | null = null;

@@ -4,6 +4,12 @@ import { textResult, toolAnnotations, schemaConfirm } from '@chrischall/mcp-util
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
 
+/** Count the unread items in a student's feedback page. */
+async function unreadCount(client: ArtsoniaClient, artist_id: string): Promise<number> {
+  const feedback = parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`));
+  return feedback.filter((f) => !f.is_read).length;
+}
+
 const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
 
 export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient): void {
@@ -50,7 +56,20 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
         });
       }
       const res = await client.write(path, body);
-      return textResult({ marked_read: true, artist_id, status: res.status });
+      // A 3xx doesn't prove the mark-all stuck (Artsonia 302s even on payloads it
+      // drops). Re-read the feedback page and confirm nothing is still unread.
+      const remaining = await unreadCount(client, artist_id);
+      const verified = remaining === 0;
+      return textResult({
+        marked_read: verified,
+        verified,
+        unread_remaining: remaining,
+        artist_id,
+        status: res.status,
+        ...(verified
+          ? {}
+          : { note: 'Artsonia accepted the request but a re-read still shows unread feedback — the mark-as-read did not fully persist.' }),
+      });
     },
   );
 }

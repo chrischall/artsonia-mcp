@@ -39,9 +39,24 @@ describe('feedback tools', () => {
     expect(mockWrite).not.toHaveBeenCalled();
   });
 
-  it('mark_feedback_read with confirm posts ConfirmAsRead to /members/feedback/default.asp', async () => {
+  it('mark_feedback_read with confirm posts ConfirmAsRead, then re-reads and reports verified when nothing is left unread', async () => {
+    // The verifying re-read shows the previously-unread item now marked read.
+    const allRead = feedback.replace(/This feedback has not been marked as read\./g, 'Read.');
+    mockFetchHtml.mockResolvedValueOnce(allRead as never);
     const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141', confirm: true }));
     expect(mockWrite).toHaveBeenCalledWith('/members/feedback/default.asp?artist=13447141', 'ConfirmAsRead=Mark+as+Read');
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=13447141'); // verifying re-read
+    expect(out.verified).toBe(true);
     expect(out.marked_read).toBe(true);
+    expect(out.unread_remaining).toBe(0);
+  });
+
+  it('mark_feedback_read reports NOT verified when the re-read still shows unread feedback (302 did not persist)', async () => {
+    mockFetchHtml.mockResolvedValueOnce(feedback as never); // re-read still has 1 unread
+    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141', confirm: true }));
+    expect(out.verified).toBe(false);
+    expect(out.marked_read).toBe(false);
+    expect(out.unread_remaining).toBe(1);
+    expect(out.note).toMatch(/did not fully persist|still shows unread/i);
   });
 });

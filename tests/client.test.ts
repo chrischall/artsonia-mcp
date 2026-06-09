@@ -54,6 +54,37 @@ describe('ArtsoniaClient.fetchHtml', () => {
     expect(post.body).toBe('Comment=hi');
   });
 
+  it('fetchproxy mode (usesBrowserSession) skips server-side login and succeeds against the authed bridge', async () => {
+    // The browser tab is already signed in: the very first request returns the
+    // real page. There must be NO login.asp POST — doLogin can never satisfy its
+    // 302+Location marker through fetchproxy, so any attempt would throw.
+    const t = scriptedTransport([
+      () => ({ status: 200, body: '<html>dash</html>', url: 'https://www.artsonia.com/members/', setCookie: [] }),
+    ]) as ArtsoniaTransport & { calls: ArtsoniaRequest[]; usesBrowserSession?: boolean };
+    t.usesBrowserSession = true;
+    // No creds configured — fetchproxy must not need them.
+    const auth = new AuthManager(t, {});
+    const client = new ArtsoniaClient({ transport: t, auth });
+
+    const html = await client.fetchHtml('/members/');
+    expect(html).toContain('dash');
+    expect(t.calls.length).toBe(1); // single request, no login POST
+    expect(t.calls.some((c) => c.path === '/members/login.asp')).toBe(false);
+    // No server-jar Cookie header is forced onto the browser request.
+    expect(t.calls[0].headers?.Cookie).toBeUndefined();
+  });
+
+  it('fetchproxy mode surfaces a browser-signin hint (not a credentials error) when the tab is signed out', async () => {
+    const t = scriptedTransport([
+      () => ({ status: 200, body: 'You need to log in', url: 'https://www.artsonia.com/members/login.asp', setCookie: [] }),
+    ]) as ArtsoniaTransport & { calls: ArtsoniaRequest[]; usesBrowserSession?: boolean };
+    t.usesBrowserSession = true;
+    const client = new ArtsoniaClient({ transport: t, auth: new AuthManager(t, {}) });
+    await expect(client.fetchHtml('/members/')).rejects.toThrow(/browser/i);
+    // It did NOT try a server-side login.
+    expect(t.calls.some((c) => c.path === '/members/login.asp')).toBe(false);
+  });
+
   it('write() triggers re-login and retries when first response is 302 to login via Location header', async () => {
     // Simulates a mid-write session expiry: the POST returns 302 with Location: /members/login.asp
     // and empty body, url = the original request path (not the login URL), so only the Location

@@ -29,10 +29,14 @@ describe('write tools', () => {
     expect(out.preview).toBe(true);
     expect(mockWrite).not.toHaveBeenCalled();
   });
-  it('post_comment with confirm posts Comment to /museum/enter.asp', async () => {
+  it('post_comment with confirm posts Comment to /museum/enter.asp and reports honestly (submitted, not verified)', async () => {
     const out = parse(await harness.callTool('artsonia_post_comment', { artist_id: '13447141', artwork_id: '150567537', comment: 'Great work!', confirm: true }));
     expect(mockWrite).toHaveBeenCalledWith('/museum/enter.asp?artist=13447141&art=150567537', 'Comment=Great+work%21');
-    expect(out.posted).toBe(true);
+    // A 3xx is not proof of persistence — no false `posted: true`.
+    expect(out.posted).toBeUndefined();
+    expect(out.submitted).toBe(true);
+    expect(out.verified).toBe(false);
+    expect(out.note).toMatch(/cannot confirm|verify/i);
   });
 
   it('invite_fan without confirm is a dry run', async () => {
@@ -58,7 +62,9 @@ describe('write tools', () => {
     expect(mockWrite).not.toHaveBeenCalled();
   });
   it('set_notifications with confirm re-sends the whole profile, flips only the chosen opt-in, blanks passwords', async () => {
-    mockFetchHtml.mockResolvedValue(profile as never);
+    // Pre-read (original) then a verifying re-read showing News now checked.
+    const after = profile.replace(/name="OptInNews" value="Y"/, 'name="OptInNews" value="Y" checked');
+    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
     await harness.callTool('artsonia_set_notifications', { news: true, confirm: true });
     const [path, body] = mockWrite.mock.calls[0];
     expect(path).toBe('/members/profile/default.asp');
@@ -69,5 +75,28 @@ describe('write tools', () => {
     expect(params.has('OptInPromos')).toBe(false);        // unchecked → omitted
     expect(params.get('NewPassword')).toBe('');           // password blanked
     expect(params.get('DidChangePassword')).toBe('N');    // preserved (no password change)
+  });
+
+  it('set_notifications re-reads after the write and reports verified when the opt-in actually flipped', async () => {
+    // Turn News ON; the verifying re-read shows News checked → verified.
+    const after = profile.replace(/name="OptInNews" value="Y"/, 'name="OptInNews" value="Y" checked');
+    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
+    const out = parse(await harness.callTool('artsonia_set_notifications', { news: true, confirm: true }));
+    expect(mockFetchHtml).toHaveBeenCalledTimes(2);                  // pre-read + verifying re-read
+    expect(mockFetchHtml.mock.calls[1][0]).toBe('/members/profile/');
+    expect(out.verified).toBe(true);
+    expect(out.updated).toBe(true);
+    expect(out.optIns.OptInNews).toBe(true);
+  });
+
+  it('set_notifications reports NOT verified when Artsonia 302s but the re-read shows no change persisted', async () => {
+    // Turn News ON, but the re-read still shows News unchecked → the 302 did not persist.
+    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(profile as never);
+    const out = parse(await harness.callTool('artsonia_set_notifications', { news: true, confirm: true }));
+    expect(out.verified).toBe(false);
+    expect(out.updated).toBe(false);
+    expect(out.optIns.OptInNews).toBe(false);                       // re-read truth, not the request
+    expect(out.note).toMatch(/did not persist|not change/i);
+    expect(out.requested.OptInNews).toBe(true);                    // what we asked for, surfaced honestly
   });
 });
