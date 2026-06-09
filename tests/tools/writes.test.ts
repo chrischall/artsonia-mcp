@@ -44,14 +44,19 @@ describe('write tools', () => {
     expect(out.preview).toBe(true);
     expect(mockWrite).not.toHaveBeenCalled();
   });
-  it('invite_fan with confirm posts to /members/fanclub/add.asp with the fan fields', async () => {
-    await harness.callTool('artsonia_invite_fan', { artist_id: '13447141', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3', confirm: true });
+  it('invite_fan with confirm posts to /members/fanclub/add.asp and reports honestly (submitted, not verified)', async () => {
+    const out = parse(await harness.callTool('artsonia_invite_fan', { artist_id: '13447141', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3', confirm: true }));
     const [path, body] = mockWrite.mock.calls[0];
     expect(path).toBe('/members/fanclub/add.asp?artist=13447141');
     expect(body).toContain('FirstName=Test');
     expect(body).toContain('EmailAddress=test%40example.com');
     expect(body).toContain('RelationshipID=3');
     expect(body).toContain('ArtistID=13447141');
+    // A 3xx is not proof of persistence — no false `invited: true`.
+    expect(out.invited).toBeUndefined();
+    expect(out.submitted).toBe(true);
+    expect(out.verified).toBe(false);
+    expect(out.note).toMatch(/cannot confirm|verify/i);
   });
 
   it('set_notifications without confirm previews the resulting opt-in state without writing', async () => {
