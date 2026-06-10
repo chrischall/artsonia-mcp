@@ -1,15 +1,8 @@
 import { loadDotenvSafely, readEnvVar, McpToolError } from '@chrischall/mcp-utils';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AuthManager } from './auth.js';
+import { AuthManager, looksUnauthenticated } from './auth.js';
 import { makeTransport, type ArtsoniaResponse, type ArtsoniaTransport } from './transport.js';
-
-const LOGIN_RE = /\/members\/login\.asp/i;
-const LOGIN_BODY_RE = /You need to log in|Parent \(or Fan\) Login/i;
-
-function looksUnauthenticated(res: ArtsoniaResponse): boolean {
-  return LOGIN_RE.test(res.url) || LOGIN_BODY_RE.test(res.body) || (res.location ? LOGIN_RE.test(res.location) : false);
-}
 
 export interface ArtsoniaClientOptions {
   transport: ArtsoniaTransport;
@@ -59,23 +52,16 @@ export class ArtsoniaClient {
       return res;
     }
 
-    await this.auth.ensureLogin();
-    let res = await this.send(method, path, body);
+    // Direct mode: the manager owns the one-replay-on-expiry. It ensures a live
+    // session, runs the request, and on a redirect-away-to-login (isExpired)
+    // invalidates + single-flight re-logs-in + replays the request EXACTLY once.
+    // What surfaces here is the FINAL response: still login-looking means either
+    // a persistent expiry or a failed re-login — both reported as a sign-in error.
+    const res = await this.auth.withSession(() => this.send(method, path, body));
     if (looksUnauthenticated(res)) {
-      this.auth.invalidate();
-      try {
-        await this.auth.forceRelogin();
-      } catch {
-        throw new McpToolError('Artsonia session could not be re-established: login failed after session expired.', {
-          hint: 'Your ARTSONIA_USERNAME / ARTSONIA_PASSWORD may be wrong, or the session keeps expiring. Verify the credentials.',
-        });
-      }
-      res = await this.send(method, path, body);
-      if (looksUnauthenticated(res)) {
-        throw new McpToolError('Artsonia session could not be (re)established after re-login.', {
-          hint: 'Your ARTSONIA_USERNAME / ARTSONIA_PASSWORD may be wrong, or the session keeps expiring. Verify the credentials.',
-        });
-      }
+      throw new McpToolError('Artsonia session could not be (re)established after re-login.', {
+        hint: 'Your ARTSONIA_USERNAME / ARTSONIA_PASSWORD may be wrong, or the session keeps expiring. Verify the credentials.',
+      });
     }
     this.auth.absorb(res.setCookie);
     if (res.status >= 400) {
