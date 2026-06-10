@@ -3,11 +3,10 @@ import { z } from 'zod';
 import { mkdir, writeFile, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf } from '@chrischall/mcp-utils';
+import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf, NumericIdString, mapWithConcurrency } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, artworkImageUrl } from '../parse.js';
 
-const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
 export const FETCH_CONCURRENCY = 6;
 const MAX_NAME_LEN = 150;
@@ -64,21 +63,6 @@ type Outcome =
   | { kind: 'skipped'; artwork_id: string; file: string }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
-/** Bounded-concurrency map that preserves input order in the result. */
-export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (next < items.length) {
-        const i = next++;
-        results[i] = await fn(items[i], i);
-      }
-    }),
-  );
-  return results;
-}
-
 export function registerDownloadTools(server: McpServer, client: ArtsoniaClient): void {
   server.registerTool(
     'artsonia_download_artwork',
@@ -88,7 +72,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Without confirm:true this is a DRY RUN that lists the resolved filenames and writes nothing. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true }),
       inputSchema: {
-        artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).'),
+        artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing.'),
         project: z.string().min(1).optional().describe('Only artworks whose school-project/class name contains this (case-insensitive).'),
         grade: z.string().min(1).optional().describe('Only artworks created in this grade, e.g. "6" or "Grade 6".'),
@@ -117,7 +101,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         // fetch the whole portfolio just to throw most of it away.
         const tilesToDetail =
           limit !== undefined && project === undefined && grade === undefined ? tiles.slice(0, limit) : tiles;
-        const detailed = await mapLimit(tilesToDetail, FETCH_CONCURRENCY, async (t): Promise<Item> => {
+        const detailed = await mapWithConcurrency(tilesToDetail, FETCH_CONCURRENCY, async (t): Promise<Item> => {
           const d = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${t.artwork_id}`));
           return { artwork_id: t.artwork_id, is_private: t.is_private, title: d.title, project: d.project, grade: d.grade };
         });
@@ -153,7 +137,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
 
       // 5. Download (bounded concurrency).
       await mkdir(destDir, { recursive: true });
-      const outcomes = await mapLimit(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
+      const outcomes = await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
         try {
           // Filenames without {date} are known up-front → skip before fetching.
           let file = templateUsesDate ? null : join(destDir, buildFilename(template, it, it.artwork_id));
