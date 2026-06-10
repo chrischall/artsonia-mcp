@@ -201,4 +201,23 @@ describe('artsonia_download_artwork', () => {
       file: 'Grade 6 - Silhouette - My silhouette (300).jpg',
     });
   });
+
+  it('write_index still writes a manifest (of on-disk items) when everything is skipped on a re-run', async () => {
+    // First run downloads everything.
+    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    // Re-run with skip_existing + write_index: nothing downloads, but the
+    // manifest must still be written (no silent absence) and list what's there.
+    const out = parse(
+      await harness.callTool('artsonia_download_artwork', {
+        artist_id: '1', dest: dir, skip_existing: true, write_index: true, confirm: true,
+      }),
+    );
+    expect(out.downloaded_count).toBe(0);
+    expect(out.skipped_count).toBe(3);
+    const indexPath = join(dir, 'index.json');
+    expect(out.index_file).toBe(indexPath); // present, not silently omitted
+    const manifest = JSON.parse(readFileSync(indexPath, 'utf8'));
+    expect(manifest.count).toBe(3); // the 3 already-present (skipped) items
+    expect(manifest.items).toHaveLength(3);
+  });
 });

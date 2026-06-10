@@ -28,7 +28,12 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       if (!include_details) return textResult({ artist_id, artworks: tiles });
       const artworks = await mapLimit(tiles, FETCH_CONCURRENCY, async (tile) => {
         const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${tile.artwork_id}`));
-        return { ...tile, ...detail };
+        // Merge only the scalar detail (title/screen-name/views/grade/project);
+        // drop the heavy per-artwork `comments` array + `comment_entry` so a
+        // large portfolio's response isn't inflated. Use artsonia_get_artwork
+        // for an individual artwork's full comments.
+        const { comments: _comments, comment_entry: _commentEntry, ...scalar } = detail;
+        return { ...tile, ...scalar };
       });
       return textResult({ artist_id, artworks });
     },

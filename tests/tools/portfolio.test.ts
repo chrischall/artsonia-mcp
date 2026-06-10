@@ -66,6 +66,10 @@ describe('portfolio tools', () => {
     // Lean tile fields are preserved.
     expect(out.artworks[0].artwork_id).toBe('150567537');
     expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/150567537.jpg');
+    // The heavy per-artwork comments array + comment_entry are dropped from
+    // the enriched rows (use artsonia_get_artwork for those).
+    expect(out.artworks[0]).not.toHaveProperty('comments');
+    expect(out.artworks[0]).not.toHaveProperty('comment_entry');
   });
   it('get_portfolio rejects a non-numeric artist_id', async () => {
     const result = await harness.callTool('artsonia_get_portfolio', { artist_id: 'abc' });

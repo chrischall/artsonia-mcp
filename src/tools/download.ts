@@ -195,22 +195,34 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       const skipped = outcomes.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
       const failed = outcomes.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
 
-      // 6. Optional sidecar manifest of what landed on disk.
+      // 6. Optional sidecar manifest of what's on disk. Written whenever
+      // write_index is requested (even if everything was skipped on a re-run),
+      // so the response always carries index_file rather than silently omitting
+      // it. Lists BOTH freshly-downloaded and already-present (skipped) items —
+      // it's an inventory of what's in `dest`, not just this run's downloads.
       let indexFile: string | undefined;
-      if (write_index && downloaded.length) {
+      if (write_index) {
         const byId = new Map(items.map((it) => [it.artwork_id, it]));
+        const onDisk: Array<{ artwork_id: string; file: string; date?: string }> = [
+          ...downloaded.map((d) => ({
+            artwork_id: d.artwork_id,
+            file: d.file,
+            ...(d.date_source === 'last-modified' ? { date: d.timestamp.slice(0, 10) } : {}),
+          })),
+          ...skipped.map((s) => ({ artwork_id: s.artwork_id, file: s.file })),
+        ];
         const manifest = {
           generated_at: new Date().toISOString(),
-          count: downloaded.length,
-          items: downloaded.map((d) => {
-            const it = byId.get(d.artwork_id);
+          count: onDisk.length,
+          items: onDisk.map((o) => {
+            const it = byId.get(o.artwork_id);
             return {
-              artwork_id: d.artwork_id,
-              file: basename(d.file),
+              artwork_id: o.artwork_id,
+              file: basename(o.file),
               ...(it?.title !== undefined ? { title: it.title } : {}),
               ...(it?.project !== undefined ? { project: it.project } : {}),
               ...(it?.grade != null ? { grade: it.grade } : {}),
-              ...(d.date_source === 'last-modified' ? { date: d.timestamp.slice(0, 10) } : {}),
+              ...(o.date !== undefined ? { date: o.date } : {}),
             };
           }),
         };
