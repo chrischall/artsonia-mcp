@@ -80,7 +80,7 @@ Notable args:
 ## Conventions
 
 - **TDD.** Write the failing test first; tests live under `tests/` (`vitest.config.ts` includes `tests/**/*.test.ts`) and mock at the `ArtsoniaClient` / transport level — no real network.
-- **Confirm-gating.** Every write takes `confirm` (`schemaConfirm`). Without `confirm:true` the tool is a DRY RUN: it returns a preview (`preview:true`, `wouldSend`/resolved filenames) and makes **no network call**.
+- **Confirm-gating.** Every write takes `confirm` (`schemaConfirm`). Without `confirm:true` the tool is a DRY RUN: it returns a preview (`preview:true`, `wouldSend`/resolved filenames) and makes **no mutating network call**. (Some previews still make READ calls to resolve their state — `set_notifications` reads `/members/profile/`, `download_artwork` reads the portfolio/detail pages for filenames — but never a write.)
 - **Write-verification contract.** Writes report `verified:true/false` **honestly**. A 302/redirect is NOT proof a write persisted — Artsonia 302s even on payloads it silently drops. Where a cheap re-read exists (`set_notifications`, `mark_feedback_read`), the tool re-reads and only claims success when the change is observed; where it doesn't (`post_comment`, `invite_fan`), it reports `verified:false` with a "check the page to confirm" note.
 - **stderr-only stdio.** stdout is reserved for JSON-RPC; logging/banners go to stderr (handled by `runMcp` / `loadDotenvSafely`).
 - **ESM `.js` extensions** on relative imports even from `.ts` sources.
