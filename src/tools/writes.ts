@@ -1,10 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { parse } from 'node-html-parser';
-import { textResult, toolAnnotations, schemaConfirm } from '@chrischall/mcp-utils';
+import { textResult, toolAnnotations, schemaConfirm, NumericIdString } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
-
-const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
 
 function previewResult(action: string, wouldSend: Record<string, unknown>, caveat?: string) {
   return textResult({
@@ -58,8 +56,8 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       description: "Post a comment on a student's artwork. Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
       annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true }),
       inputSchema: {
-        artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).'),
-        artwork_id: NumericId.describe('Artwork id (from artsonia_get_portfolio).'),
+        artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
+        artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).'),
         comment: z.string().min(1).describe('The comment text to post.'),
         confirm: schemaConfirm,
       },
@@ -90,11 +88,11 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. Without confirm:true this is a DRY RUN. Use only real addresses you're authorized to invite (test with @example.com).",
       annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true }),
       inputSchema: {
-        artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).'),
+        artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         first_name: z.string().min(1).describe("Fan's first name."),
         last_name: z.string().min(1).describe("Fan's last name."),
         email: z.string().email().describe("Fan's email address (they receive an invite)."),
-        relationship_id: NumericId.describe('Relationship code (RelationshipID select value from the Add Fans form).'),
+        relationship_id: NumericIdString.describe('Relationship code (RelationshipID select value from the Add Fans form).'),
         is_parent: z.boolean().default(false).describe('Whether this fan is also a parent/guardian.'),
         confirm: schemaConfirm,
       },
