@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0](https://github.com/chrischall/artsonia-mcp/compare/v0.4.0...v0.5.0) (2026-06-10)
+
+
+### Features
+
+* portfolio include_details + download index.json manifest ([#22](https://github.com/chrischall/artsonia-mcp/issues/22)) ([33925b4](https://github.com/chrischall/artsonia-mcp/commit/33925b4e3315ad201457da2377653d18f508efce))
+
+
+### Bug Fixes
+
+* skip server login in fetchproxy mode + verify writes persisted ([#18](https://github.com/chrischall/artsonia-mcp/issues/18)) ([3959eab](https://github.com/chrischall/artsonia-mcp/commit/3959eab5f19bbd9c8e304cdfde4914a2a25ff141))
+
+
+### Refactor
+
+* adopt CookieSessionManager for direct-mode auth lifecycle ([#20](https://github.com/chrischall/artsonia-mcp/issues/20)) ([53212cf](https://github.com/chrischall/artsonia-mcp/commit/53212cfb9f963ff318bb6b18ece43fabf47af53c))
+* adopt mcp-utils 0.9/0.10 atoms (NumericIdString, mapWithConcurrency) ([#23](https://github.com/chrischall/artsonia-mcp/issues/23)) ([96eca5a](https://github.com/chrischall/artsonia-mcp/commit/96eca5a3b9ee3c84e093f6e6dade78ded7089454))
+* route direct-mode replay through CookieSessionManager.withSession ([#21](https://github.com/chrischall/artsonia-mcp/issues/21)) ([6902131](https://github.com/chrischall/artsonia-mcp/commit/690213186f91ab9f84c23e7a4d718f88f31822e6))
+
 ## [0.4.0](https://github.com/chrischall/artsonia-mcp/compare/v0.3.0...v0.4.0) (2026-06-05)
 
 
