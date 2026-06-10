@@ -45,6 +45,28 @@ describe('portfolio tools', () => {
     // comments markup is UNVERIFIED for non-zero; fixture has 0 comments
     expect(Array.isArray(out.comments)).toBe(true);
   });
+  it('get_portfolio without include_details returns lean tiles and fetches portfolio only', async () => {
+    mockFetchHtml.mockResolvedValue(portfolio);
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
+    expect(mockFetchHtml).toHaveBeenCalledTimes(1); // portfolio only, no per-artwork detail
+    expect(out.artworks[0]).not.toHaveProperty('title');
+    expect(out.artworks[0]).not.toHaveProperty('project');
+  });
+  it('get_portfolio with include_details=true enriches each row with detail fields', async () => {
+    mockFetchHtml.mockImplementation(((p: string) =>
+      Promise.resolve(p.includes('portfolio.asp') ? portfolio : artwork)) as never);
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141', include_details: true }));
+    // portfolio (1) + one detail fetch per artwork (2) = 3
+    expect(mockFetchHtml).toHaveBeenCalledTimes(3);
+    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=150567537');
+    expect(out.artworks).toHaveLength(2);
+    expect(out.artworks[0].title).toBe('My silhouette still life');
+    expect(out.artworks[0].project).toBe('6th Grade Silhouette Still Life');
+    expect(out.artworks[0].grade).toBeDefined();
+    // Lean tile fields are preserved.
+    expect(out.artworks[0].artwork_id).toBe('150567537');
+    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/150567537.jpg');
+  });
   it('get_portfolio rejects a non-numeric artist_id', async () => {
     const result = await harness.callTool('artsonia_get_portfolio', { artist_id: 'abc' });
     expect(result.isError).toBe(true);

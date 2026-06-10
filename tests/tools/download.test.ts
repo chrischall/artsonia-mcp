@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import { registerDownloadTools, buildFilename } from '../../src/tools/download.js';
 import { client } from '../../src/client.js';
 import { createTestHarness } from '../helpers.js';
-import { mkdtempSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -174,5 +174,31 @@ describe('artsonia_download_artwork', () => {
   it('resolution flows through to the CDN url', async () => {
     await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 1, resolution: 'large', filename_template: '{artwork_id}', confirm: true });
     expect(mockFetch).toHaveBeenCalledWith('https://images.artsonia.com/art/large/300.jpg');
+  });
+
+  it('without write_index, no manifest is written and result has no index_file', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true }));
+    expect(out.downloaded_count).toBe(3);
+    expect(readdirSync(dir)).not.toContain('index.json');
+    expect(out.index_file).toBeUndefined();
+  });
+
+  it('write_index writes index.json listing the downloaded items and reports its path', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, write_index: true, confirm: true }));
+    expect(out.downloaded_count).toBe(3);
+    const indexPath = join(dir, 'index.json');
+    expect(out.index_file).toBe(indexPath);
+    expect(readdirSync(dir)).toContain('index.json');
+    const manifest = JSON.parse(readFileSync(indexPath, 'utf8'));
+    expect(manifest.count).toBe(3);
+    expect(manifest.items).toHaveLength(3);
+    const item = manifest.items.find((i: any) => i.artwork_id === '300');
+    expect(item).toMatchObject({
+      artwork_id: '300',
+      title: 'My silhouette',
+      project: 'Silhouette',
+      grade: '6',
+      file: 'Grade 6 - Silhouette - My silhouette (300).jpg',
+    });
   });
 });
