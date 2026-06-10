@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { textResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork } from '../parse.js';
+import { mapLimit, FETCH_CONCURRENCY } from './download.js';
 
 const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
 
@@ -11,11 +12,31 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     'artsonia_get_portfolio',
     {
       title: "Get a student's portfolio",
-      description: "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students.",
+      description:
+        "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students. Set include_details:true to also fetch each artwork's full detail (title, project, grade, views, …) in one call — this fetches a detail page per artwork (slower), so leave it off when the lean tiles are enough.",
       annotations: toolAnnotations({ title: "Get a student's portfolio", openWorld: true }),
-      inputSchema: { artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).') },
+      inputSchema: {
+        artist_id: NumericId.describe('Student artist_id (from artsonia_list_students).'),
+        include_details: z
+          .boolean()
+          .default(false)
+          .describe('Fetch each artwork\'s full detail (title/project/grade/views/…) concurrently and merge it into the rows. Off by default (lean tiles, one request).'),
+      },
     },
-    async ({ artist_id }) => textResult({ artist_id, artworks: parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`)) }),
+    async ({ artist_id, include_details }) => {
+      const tiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
+      if (!include_details) return textResult({ artist_id, artworks: tiles });
+      const artworks = await mapLimit(tiles, FETCH_CONCURRENCY, async (tile) => {
+        const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${tile.artwork_id}`));
+        // Merge only the scalar detail (title/screen-name/views/grade/project);
+        // drop the heavy per-artwork `comments` array + `comment_entry` so a
+        // large portfolio's response isn't inflated. Use artsonia_get_artwork
+        // for an individual artwork's full comments.
+        const { comments: _comments, comment_entry: _commentEntry, ...scalar } = detail;
+        return { ...tile, ...scalar };
+      });
+      return textResult({ artist_id, artworks });
+    },
   );
   server.registerTool(
     'artsonia_get_artwork',

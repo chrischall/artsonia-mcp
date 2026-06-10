@@ -74,8 +74,9 @@ Username/password auth using your Artsonia parent/fan account credentials. The s
 | Tool | Description |
 |------|-------------|
 | `artsonia_get_activity` | Get recent activity feed for a student |
-| `artsonia_get_portfolio` | Get a student's art portfolio |
+| `artsonia_get_portfolio` | Get a student's art portfolio. Optional `include_details: boolean` (default `false`) fetches each artwork's full detail (title/project/grade/views/…) concurrently and merges it into the rows; omit it for the fast, lean tiles. |
 | `artsonia_get_artwork` | Get details for a single artwork |
+| `artsonia_download_artwork` | Download a student's artwork images to a local folder. Optional `write_index: boolean` (default `false`) writes an `index.json` manifest into the destination listing the downloaded items (`artwork_id`, `title`, `file`, `grade`, `project`, `date`); the manifest path is returned as `index_file`. |
 
 ### Social
 | Tool | Description |

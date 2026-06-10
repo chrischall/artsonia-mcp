@@ -2,14 +2,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { mkdir, writeFile, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, artworkImageUrl } from '../parse.js';
 
 const NumericId = z.string().regex(/^\d+$/, 'must be a numeric id');
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
-const FETCH_CONCURRENCY = 6;
+export const FETCH_CONCURRENCY = 6;
 const MAX_NAME_LEN = 150;
 
 /** "Grade 6" / "grade 6" / "6" → "6"; "Grade K" → "k". */
@@ -65,7 +65,7 @@ type Outcome =
   | { kind: 'failed'; artwork_id: string; reason: string };
 
 /** Bounded-concurrency map that preserves input order in the result. */
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   await Promise.all(
@@ -97,10 +97,11 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         filename_template: z.string().min(1).default(DEFAULT_TEMPLATE).describe('Filename pattern. Tokens: {title} {project} {grade} {date} {artwork_id}. The artwork_id is auto-appended for uniqueness if absent. Use "{artwork_id}" for the fast id-only path (no detail fetch).'),
         set_mtime_from_source: z.boolean().default(true).describe("Set each file's modified time from the image's Last-Modified header (its Artsonia upload date) instead of the download moment."),
         skip_existing: z.boolean().default(true).describe('Skip artworks whose target file already exists (idempotent re-runs). Set false to overwrite.'),
+        write_index: z.boolean().default(false).describe('After downloading, write an index.json manifest into the destination folder listing the downloaded items (artwork_id, title, file, grade, project, date). Off by default.'),
         confirm: schemaConfirm,
       },
     },
-    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, set_mtime_from_source, skip_existing, confirm }) => {
+    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, set_mtime_from_source, skip_existing, write_index, confirm }) => {
       const template = filename_template;
       const templateUsesDate = /\{date\}/.test(template);
       const needDetail = project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(template);
@@ -193,6 +194,42 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       const downloaded = outcomes.filter((o): o is Extract<Outcome, { kind: 'downloaded' }> => o.kind === 'downloaded');
       const skipped = outcomes.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
       const failed = outcomes.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
+
+      // 6. Optional sidecar manifest of what's on disk. Written whenever
+      // write_index is requested (even if everything was skipped on a re-run),
+      // so the response always carries index_file rather than silently omitting
+      // it. Lists BOTH freshly-downloaded and already-present (skipped) items —
+      // it's an inventory of what's in `dest`, not just this run's downloads.
+      let indexFile: string | undefined;
+      if (write_index) {
+        const byId = new Map(items.map((it) => [it.artwork_id, it]));
+        const onDisk: Array<{ artwork_id: string; file: string; date?: string }> = [
+          ...downloaded.map((d) => ({
+            artwork_id: d.artwork_id,
+            file: d.file,
+            ...(d.date_source === 'last-modified' ? { date: d.timestamp.slice(0, 10) } : {}),
+          })),
+          ...skipped.map((s) => ({ artwork_id: s.artwork_id, file: s.file })),
+        ];
+        const manifest = {
+          generated_at: new Date().toISOString(),
+          count: onDisk.length,
+          items: onDisk.map((o) => {
+            const it = byId.get(o.artwork_id);
+            return {
+              artwork_id: o.artwork_id,
+              file: basename(o.file),
+              ...(it?.title !== undefined ? { title: it.title } : {}),
+              ...(it?.project !== undefined ? { project: it.project } : {}),
+              ...(it?.grade != null ? { grade: it.grade } : {}),
+              ...(o.date !== undefined ? { date: o.date } : {}),
+            };
+          }),
+        };
+        indexFile = join(destDir, 'index.json');
+        await writeFile(indexFile, JSON.stringify(manifest, null, 2));
+      }
+
       return textResult({
         downloaded_count: downloaded.length,
         skipped_count: skipped.length,
@@ -202,6 +239,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         downloaded: downloaded.map(({ kind, ...rest }) => rest),
         ...(skipped.length ? { skipped: skipped.map(({ kind, ...rest }) => rest) } : {}),
         ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => rest) } : {}),
+        ...(indexFile ? { index_file: indexFile } : {}),
       });
     },
   );
