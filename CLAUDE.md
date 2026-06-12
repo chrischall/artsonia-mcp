@@ -45,7 +45,8 @@ src/
     fans.ts               # artsonia_get_fans
     feedback.ts           # artsonia_get_feedback, artsonia_mark_feedback_read
     account.ts            # artsonia_get_awards, artsonia_get_profile
-    download.ts           # artsonia_download_artwork + buildFilename() + FETCH_CONCURRENCY
+    download.ts           # artsonia_download_artwork + buildFilename()/buildRelPath() + FETCH_CONCURRENCY
+    embed.ts              # embedJpegMetadata(): EXIF (piexif-ts) + hand-rolled IPTC APP13; lazily imported by download.ts
     writes.ts             # artsonia_post_comment, artsonia_invite_fan, artsonia_set_notifications + parseProfileForm()
 ```
 
@@ -76,7 +77,7 @@ All tools are `artsonia_*`-prefixed. R = read-only, W = write (confirm-gated). R
 Notable args:
 - `get_portfolio` `include_details:true` fetches each artwork's detail page concurrently (slower) and merges the scalar fields (drops the heavy per-artwork `comments`); off by default returns lean tiles in one request.
 - `download_artwork` `write_index:true` writes an `index.json` manifest (artwork_id, title, file, grade, project, date) of what's on disk (downloaded + skipped); returned as `index_file`. Image CDN is public — no auth needed.
-- `download_artwork` `write_metadata:true` writes a per-artwork `<image-name>.json` sidecar next to each image (downloaded + skipped) carrying the artwork's comments (same source as `list_comments`) and the student's teacher feedback for it (same source as `get_feedback`); count returned as `metadata_count`. `include_private:false` excludes private pieces (`private_excluded_count`). The result reports `total_bytes` + `private_count` and per-file `is_private`; the dry run adds `estimated_bytes`/`estimated_total_bytes` via HEAD probes of the public CDN (read-only). Unfiltered confirmed runs also re-read `/members/` and report a `count_check` (+ `warning`) when `downloaded+skipped` ≠ the student's `artwork_count`, so partial pulls don't pass silently.
+- `download_artwork` `write_metadata:true` writes a per-artwork `<image-name>.json` sidecar next to each image (downloaded + skipped) carrying the artwork's comments (same source as `list_comments`) and the student's teacher feedback for it (same source as `get_feedback`); count returned as `metadata_count`. `path_template` (e.g. `"{grade}/{project}"` or `"{school_year}"`) lays downloads out into subfolders composed with `filename_template` — same tokens + slugification, empty segments collapse, deterministic paths keep `skip_existing` idempotent; `{school_year}` (July–June) derives from the image's `Last-Modified`. `embed_metadata:true` embeds title/project/grade + the source date into each JPEG's EXIF/IPTC via a lazily-imported `embed.ts` (piexif-ts + hand-rolled IPTC APP13) — best-effort (a failed embed writes the original bytes), applies to freshly downloaded files only, count returned as `embedded_count`. `include_private:false` excludes private pieces (`private_excluded_count`). The result reports `total_bytes` + `private_count` and per-file `is_private`; the dry run adds `estimated_bytes`/`estimated_total_bytes` via HEAD probes of the public CDN (read-only). Unfiltered confirmed runs also re-read `/members/` and report a `count_check` (+ `warning`) when `downloaded+skipped` ≠ the student's `artwork_count`, so partial pulls don't pass silently.
 
 ## Conventions
 

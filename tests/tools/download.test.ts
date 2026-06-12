@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
-import { registerDownloadTools, buildFilename } from '../../src/tools/download.js';
+import * as piexif from 'piexif-ts';
+import { registerDownloadTools, buildFilename, buildRelPath } from '../../src/tools/download.js';
 import { client } from '../../src/client.js';
 import { createTestHarness } from '../helpers.js';
+import { tinyJpeg, parseIptc } from '../jpeg-fixture.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -100,6 +102,31 @@ describe('buildFilename', () => {
   });
   it('substitutes {date}', () => {
     expect(buildFilename('{date} - {title}', { date: '2022-03-18', title: 'Sun' }, '5')).toBe('2022-03-18 - Sun (5).jpg');
+  });
+  it('substitutes {school_year} derived from the date (July–June)', () => {
+    expect(buildFilename('{school_year} - {title}', { date: '2022-03-18', title: 'Sun' }, '5')).toBe('2021-2022 - Sun (5).jpg');
+    expect(buildFilename('{school_year} - {title}', { date: '2021-09-10', title: 'Sun' }, '5')).toBe('2021-2022 - Sun (5).jpg');
+    expect(buildFilename('{school_year} - {title}', { title: 'Sun' }, '5')).toBe('Sun (5).jpg'); // no date → token collapses
+  });
+});
+
+describe('buildRelPath', () => {
+  it('resolves tokens into slugified path segments', () => {
+    expect(buildRelPath('{grade}/{project}', { grade: '6', project: 'Clay' }, '42')).toEqual(['Grade 6', 'Clay']);
+  });
+  it('collapses empty tokens — no empty path segments', () => {
+    expect(buildRelPath('{grade}/{project}/', { grade: null, project: 'Clay' }, '42')).toEqual(['Clay']);
+    expect(buildRelPath('{title}', {}, '42')).toEqual([]);
+  });
+  it('derives {school_year} from the date', () => {
+    expect(buildRelPath('{school_year}', { date: '2022-03-18' }, '42')).toEqual(['2021-2022']);
+    expect(buildRelPath('{school_year}', { date: '2021-09-10' }, '42')).toEqual(['2021-2022']);
+  });
+  it('a slash inside a token value never creates an extra directory', () => {
+    expect(buildRelPath('{project}', { project: 'a/b: c' }, '1')).toEqual(['ab c']);
+  });
+  it('drops "." / ".." segments — templates cannot escape dest', () => {
+    expect(buildRelPath('../{project}', { project: 'Clay' }, '1')).toEqual(['Clay']);
   });
 });
 
@@ -392,5 +419,141 @@ describe('artsonia_download_artwork', () => {
     expect(out.metadata_count).toBe(3); // sidecars written for already-present images too
     const sidecar = JSON.parse(readFileSync(join(dir, '300.json'), 'utf8'));
     expect(sidecar.comments).toEqual([{ author: 'Grandma', text: 'Love it!' }]);
+  });
+
+  // --- path_template: folder layouts for multi-year archives (issue #14) ---
+
+  it('without path_template the layout stays flat (default behavior preserved)', async () => {
+    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    expect(readdirSync(dir, { withFileTypes: true }).every((e) => e.isFile())).toBe(true);
+  });
+
+  it('path_template lays files out into nested folders composed with filename_template', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}', confirm: true,
+    }));
+    expect(out.downloaded_count).toBe(3);
+    expect(readdirSync(join(dir, 'Grade 6', 'Silhouette'))).toEqual(['My silhouette (300).jpg']);
+    expect(readdirSync(join(dir, 'Grade 6', 'Clay'))).toEqual(['Clay pot (200).jpg']);
+    expect(readdirSync(join(dir, 'Grade 5', 'Warmup'))).toEqual(['Untitled (100).jpg']);
+  });
+
+  it('path_template {school_year} folders derive from the image Last-Modified', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{school_year}', filename_template: '{artwork_id}', confirm: true,
+    }));
+    expect(out.downloaded_count).toBe(3);
+    // LASTMOD is 2022-03-18 → school year 2021-2022.
+    expect(readdirSync(join(dir, '2021-2022')).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
+  });
+
+  it('path_template re-runs are idempotent: skip_existing skips across template paths (no re-fetch)', async () => {
+    await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', confirm: true,
+    });
+    const callsAfterFirst = mockFetch.mock.calls.length;
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', confirm: true,
+    }));
+    expect(out.skipped_count).toBe(3);
+    expect(out.downloaded_count).toBe(0);
+    expect(mockFetch.mock.calls.length).toBe(callsAfterFirst); // no new image fetches
+  });
+
+  it('dry run with path_template previews the folder-relative paths and writes nothing', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}',
+    }));
+    expect(out.preview).toBe(true);
+    expect(out.artworks[0]).toMatchObject({ artwork_id: '300', filename: 'Grade 6/Silhouette/My silhouette (300).jpg' });
+    expect(readdirSync(dir)).toHaveLength(0);
+  });
+
+  it('write_index with path_template records folder-relative file paths', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_index: true, confirm: true,
+    }));
+    expect(out.downloaded_count).toBe(3);
+    const manifest = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
+    const item = manifest.items.find((i: any) => i.artwork_id === '300');
+    expect(item.file).toBe('Grade 6/Silhouette/Grade 6 - Silhouette - My silhouette (300).jpg');
+  });
+
+  it('write_metadata sidecars land next to their images inside template folders', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_metadata: true, confirm: true,
+    }));
+    expect(out.metadata_count).toBe(3);
+    const sidecar = JSON.parse(readFileSync(join(dir, 'Grade 6', 'Silhouette', 'Grade 6 - Silhouette - My silhouette (300).json'), 'utf8'));
+    expect(sidecar.artwork_id).toBe('300');
+  });
+
+  // --- embed_metadata: EXIF/IPTC inside the JPEG (issue #13) ---
+
+  it('embed_metadata default off: written bytes are byte-identical to the source image', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
+    })));
+    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    const written = readFileSync(join(dir, 'Grade 6 - Silhouette - My silhouette (300).jpg'));
+    expect(written.equals(tinyJpeg())).toBe(true);
+  });
+
+  it('embed_metadata writes EXIF + IPTC that parse back from the downloaded JPEG', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
+    })));
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, embed_metadata: true, confirm: true,
+    }));
+    expect(out.downloaded_count).toBe(3);
+    expect(out.embedded_count).toBe(3);
+    const f = join(dir, 'Grade 6 - Silhouette - My silhouette (300).jpg');
+    const written = readFileSync(f);
+    const exif = piexif.load(written.toString('latin1'));
+    expect(exif['0th']![piexif.TagValues.ImageIFD.ImageDescription]).toBe('My silhouette');
+    // Date comes from the image's Last-Modified, same source as date_source.
+    expect(exif['Exif']![piexif.TagValues.ExifIFD.DateTimeOriginal]).toBe('2022:03:18 15:51:37');
+    const sets = parseIptc(written);
+    const keywords = sets.filter((s) => s.record === 2 && s.dataset === 25).map((s) => s.data.toString('utf8'));
+    expect(keywords).toEqual(expect.arrayContaining(['Silhouette', 'Grade 6']));
+    // mtime is still set from Last-Modified after embedding.
+    expect(statSync(f).mtime.toISOString().startsWith('2022-03-18')).toBe(true);
+  });
+
+  it('embed_metadata failure (non-JPEG payload) degrades gracefully: original bytes written, run not failed', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, embed_metadata: true, confirm: true,
+    }));
+    // The default mock returns 20k zero bytes — not a JPEG — so embedding fails per-file.
+    expect(out.downloaded_count).toBe(3);
+    expect(out.failed_count).toBe(0);
+    expect(out.embedded_count).toBe(0);
+    const written = readFileSync(join(dir, 'Grade 6 - Silhouette - My silhouette (300).jpg'));
+    expect(written.equals(Buffer.alloc(20_000))).toBe(true);
+  });
+
+  it('embed_metadata keeps the id-only fast path in dry-run (detail only fetched on confirmed runs)', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true,
+    }));
+    expect(out.preview).toBe(true);
+    expect(mockFetchHtml).toHaveBeenCalledTimes(1); // portfolio only
+    expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
+  });
+
+  it('embed_metadata on the id-only template fetches detail on the confirmed run (fields needed for EXIF)', async () => {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+      status: 200,
+      headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
+    })));
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true, confirm: true,
+    }));
+    expect(out.embedded_count).toBe(3);
+    const exif = piexif.load(readFileSync(join(dir, '300.jpg')).toString('latin1'));
+    expect(exif['0th']![piexif.TagValues.ImageIFD.ImageDescription]).toBe('My silhouette');
   });
 });

@@ -48,6 +48,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.0",
     "node-html-parser": "^7.0.1",
+    "piexif-ts": "^2.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
