@@ -68,7 +68,7 @@ All tools are `artsonia_*`-prefixed. R = read-only, W = write (confirm-gated). R
 | `artsonia_mark_feedback_read` | feedback.ts | POST `/members/feedback/default.asp?artist=` (`ConfirmAsRead`) | W |
 | `artsonia_get_awards` | account.ts | GET `/artists/awards.asp?id=` | R |
 | `artsonia_get_profile` | account.ts | GET `/members/profile/` | R |
-| `artsonia_download_artwork` | download.ts | GET portfolio (+ detail pages) → `images.artsonia.com/art/<res>/<id>.jpg`; optional `write_index` → `index.json` | W |
+| `artsonia_download_artwork` | download.ts | GET portfolio (+ detail pages) → `images.artsonia.com/art/<res>/<id>.jpg`; optional `write_index` → `index.json`; optional `write_metadata` → per-artwork `.json` sidecars (+ GET `/members/feedback/?artist=`) | W |
 | `artsonia_post_comment` | writes.ts | POST `/museum/enter.asp?artist=&art=` (`Comment`) | W |
 | `artsonia_invite_fan` | writes.ts | POST `/members/fanclub/add.asp?artist=` | W |
 | `artsonia_set_notifications` | writes.ts | GET `/members/profile/` (read) → POST `/members/profile/default.asp` (read-modify-write) | W |
@@ -76,6 +76,7 @@ All tools are `artsonia_*`-prefixed. R = read-only, W = write (confirm-gated). R
 Notable args:
 - `get_portfolio` `include_details:true` fetches each artwork's detail page concurrently (slower) and merges the scalar fields (drops the heavy per-artwork `comments`); off by default returns lean tiles in one request.
 - `download_artwork` `write_index:true` writes an `index.json` manifest (artwork_id, title, file, grade, project, date) of what's on disk (downloaded + skipped); returned as `index_file`. Image CDN is public — no auth needed.
+- `download_artwork` `write_metadata:true` writes a per-artwork `<image-name>.json` sidecar next to each image (downloaded + skipped) carrying the artwork's comments (same source as `list_comments`) and the student's teacher feedback for it (same source as `get_feedback`); count returned as `metadata_count`. `include_private:false` excludes private pieces (`private_excluded_count`). The result reports `total_bytes` + `private_count` and per-file `is_private`; the dry run adds `estimated_bytes`/`estimated_total_bytes` via HEAD probes of the public CDN (read-only). Unfiltered confirmed runs also re-read `/members/` and report a `count_check` (+ `warning`) when `downloaded+skipped` ≠ the student's `artwork_count`, so partial pulls don't pass silently.
 
 ## Conventions
 
