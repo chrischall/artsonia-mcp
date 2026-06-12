@@ -98,8 +98,11 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       const template = filename_template;
       const templateUsesDate = /\{date\}/.test(template);
       // write_metadata needs each artwork's detail page anyway (for its comments),
-      // so it rides the same up-front detail fetch as descriptive filenames.
-      const needDetail = project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(template) || write_metadata;
+      // so it rides the same up-front detail fetch as descriptive filenames — but
+      // only on confirmed runs: previews discard comments, so dry-run keeps the
+      // {artwork_id} fast path (review on #30).
+      const needDetail =
+        project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(template) || (write_metadata && confirm === true);
 
       // 1. Portfolio → artwork ids (newest-first) + private flags.
       const allTiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
@@ -310,7 +313,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         downloaded_count: downloaded.length,
         skipped_count: skipped.length,
         failed_count: failed.length,
-        private_count: items.filter((it) => it.is_private).length,
+        private_count: privateCount,
         ...(privateExcluded > 0 ? { private_excluded_count: privateExcluded } : {}),
         total_bytes: downloaded.reduce((sum, d) => sum + d.bytes, 0),
         dest: destDir,

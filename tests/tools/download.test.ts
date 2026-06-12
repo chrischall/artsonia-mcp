@@ -166,6 +166,16 @@ describe('artsonia_download_artwork', () => {
     expect(statSync(join(dir, '300.jpg')).mtime.getUTCFullYear()).not.toBe(2022);
   });
 
+  it('write_metadata does not break the id-only fast path in dry-run (comments unused in previews)', async () => {
+    const out = parse(await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', write_metadata: true,
+    }));
+    expect(out.preview).toBe(true);
+    // Portfolio only — the preview discards comments, so no per-artwork detail.
+    expect(mockFetchHtml).toHaveBeenCalledTimes(1);
+    expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
+  });
+
   it('skip_existing makes a re-run a no-op (no image re-fetch)', async () => {
     await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
     const callsAfterFirst = mockFetch.mock.calls.length;
