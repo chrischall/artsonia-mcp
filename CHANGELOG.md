@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/chrischall/artsonia-mcp/compare/v0.5.0...v0.6.0) (2026-06-13)
+
+
+### Features
+
+* download richer result + dry-run estimates + comments/feedback sidecars ([#30](https://github.com/chrischall/artsonia-mcp/issues/30)) ([d8cfcaf](https://github.com/chrischall/artsonia-mcp/commit/d8cfcaf9c52126d47848f2070e354d66288b7752))
+* embed EXIF/IPTC metadata and folder templates for artwork downloads ([#31](https://github.com/chrischall/artsonia-mcp/issues/31)) ([e720c44](https://github.com/chrischall/artsonia-mcp/commit/e720c44de192b4484de6a7e6ad3fcb27656d7f08)), closes [#13](https://github.com/chrischall/artsonia-mcp/issues/13) [#14](https://github.com/chrischall/artsonia-mcp/issues/14)
+
+
+### Bug Fixes
+
+* bot PRs bypass the CI gate unconditionally ([#28](https://github.com/chrischall/artsonia-mcp/issues/28)) ([299f3c5](https://github.com/chrischall/artsonia-mcp/commit/299f3c53bf6cc8793016356af62696d839641e4b))
+
+
+### Documentation
+
+* add CLAUDE.md cohort guide ([#24](https://github.com/chrischall/artsonia-mcp/issues/24)) ([c9c9094](https://github.com/chrischall/artsonia-mcp/commit/c9c9094c8b77723760e9391eac9afe470cf1502a))
+* add MIT LICENSE file and README badges ([#26](https://github.com/chrischall/artsonia-mcp/issues/26)) ([46a10e4](https://github.com/chrischall/artsonia-mcp/commit/46a10e411e6647009b997f457ef8691043552b60))
+
 ## [0.5.0](https://github.com/chrischall/artsonia-mcp/compare/v0.4.0...v0.5.0) (2026-06-10)
 
 
