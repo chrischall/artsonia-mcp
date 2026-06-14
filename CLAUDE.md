@@ -121,6 +121,7 @@ The MCP Registry's [server.schema.json](https://static.modelcontextprotocol.io/s
 jq -r '.description | length' server.json
 ```
 
+<!-- pr-workflow:v2 -->
 ## Pull requests & release notes
 
 **Default workflow: branch + PR, even for solo work.** Apply exactly one label so the change lands in the right release-notes section (sections come from release-please's `changelog-sections`):
@@ -136,7 +137,7 @@ jq -r '.description | length' server.json
 | `dependencies` | Dependencies |
 | `ignore-for-release` | Hidden from notes |
 
-The **PR title** becomes the changelog bullet — write it user-facing. Conventional-commit prefixes (`feat:`, `fix:`, `docs:`…) belong in commit messages and drive the version bump.
+The **PR title MUST be a Conventional Commit**, written user-facing (`fix(scope): …`, `feat(scope): …`), not internal shorthand. Because the repo squash-merges, the PR title *becomes the squash commit's subject line* — the only thing release-please parses to pick the version bump and changelog section. Only `feat` (minor), `fix` (patch), and `!`/`BREAKING CHANGE` (major) cut a release; `perf`/`refactor`/`docs` show in the changelog without bumping; `ci`/`test`/`build`/`chore` are recognised but hidden (see `release-please-config.json` → `changelog-sections`). A title without a conventional type is invisible to release-please — no bump, no changelog line. Prefixes in *individual commits* don't help; squash keeps only the title.
 
 ### How PRs merge
 
