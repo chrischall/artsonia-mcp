@@ -101,7 +101,7 @@ Notable args:
 
 Versioning is automated by **release-please** (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`). On every push to `main` it scans Conventional-Commit messages and opens/updates a `chore(main): release X.Y.Z` PR that bumps every registered file. Merging that release PR creates the `v<VERSION>` tag + GitHub Release, and the `publish` job packs `.mcpb` + `.skill`, publishes to npm (with provenance), the MCP Registry, and ClawHub.
 
-The version string (currently `0.5.0`) is mirrored across these files — release-please owns all of them via `extra-files`; **do NOT bump manually**:
+The version string (currently `0.6.0`) is mirrored across these files — release-please owns all of them via `extra-files`; **do NOT bump manually**:
 
 - `package.json` (`version`) + `package-lock.json`
 - `src/version.ts` (`VERSION`, the `x-release-please-version` marker)
@@ -143,10 +143,23 @@ The **PR title MUST be a Conventional Commit**, written user-facing (`fix(scope)
 
 **Don't run `gh pr merge` yourself.** The automation does it:
 
-1. `pr-auto-review.yml` runs a Claude review on every PR **except** the release-please release PR (skipped on purpose). On a `pass` verdict it adds `ready-to-merge`.
+1. `pr-auto-review.yml` runs a Claude review on every PR **except** the release-please release PR (skipped on purpose). On a `pass` **or** `warn` verdict it adds `ready-to-merge`; only `fail` withholds the label and blocks the merge. `warn`/`fail` also open or update a follow-up issue (see [Auto-review follow-up issues](#auto-review-follow-up-issues)).
 2. `auto-merge.yml`, on the `ready-to-merge` label (or a dependabot PR), arms `gh pr merge --auto --squash`. The moment CI is green the PR squash-merges itself.
 
-For ordinary PRs, `gh pr create --label <label>` is the whole job. If the verdict was `warn`/`fail` but you've decided to ship, add the label yourself: `gh pr edit <num> --add-label ready-to-merge`. **Release PRs are the one manual touch** — add `ready-to-merge` to ship them.
+For ordinary PRs, `gh pr create --label <label>` is the whole job. If the verdict was `fail` but you've decided to ship, add the label yourself: `gh pr edit <num> --add-label ready-to-merge`. **Release PRs are the one manual touch** — add `ready-to-merge` to ship them.
+
+### Auto-review follow-up issues
+
+When a PR's auto-review verdict is `warn` or `fail`, the `chrischall/workflows` pipeline opens or updates a single `auto-review-followup` issue ("Auto-review follow-ups for PR #N") whose checklist captures every finding, and links it from the PR's `<!-- auto-review-verdict -->` comment (`📋 Tracking follow-ups: #N`). `warn` (nits only) still auto-merges — the issue carries the nits forward, so most nits are fixed in a *later* PR; `fail` blocks until the important findings are addressed on the PR itself.
+
+When asked to address the auto-review comments / review findings on a PR:
+
+1. Read the verdict comment, open the linked `auto-review-followup` issue, and treat its checklist as the work list (alongside any inline review comments).
+2. Resolve each item, checking off only what you've **verified** is genuinely fixed.
+3. If every item is resolved on the current PR, add `Closes #<issue>` to that PR's body so the merge closes it; if some are deferred, check off only the resolved ones and leave the issue open.
+4. For nits whose `warn` PR already auto-merged, address them in a follow-up PR that references `Closes #<issue>`.
+
+(Mirrors the fleet-wide convention in `~/.claude/CLAUDE.md`.)
 
 ## What to *not* do
 
