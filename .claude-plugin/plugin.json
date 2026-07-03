@@ -1,7 +1,7 @@
 {
   "name": "artsonia-mcp",
   "displayName": "Artsonia",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "MCP server for Artsonia — natural-language access to student-art portfolios, comments, and fans",
   "author": {
     "name": "Chris Hall",

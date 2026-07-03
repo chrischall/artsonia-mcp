@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/chrischall/artsonia-mcp/compare/v0.6.0...v0.6.1) (2026-07-03)
+
+
+### Documentation
+
+* refresh version note and add auto-review follow-up convention ([#37](https://github.com/chrischall/artsonia-mcp/issues/37)) ([3d89264](https://github.com/chrischall/artsonia-mcp/commit/3d8926455440c1da4a5241c41692baad9a60bc7f))
+* require Conventional Commit PR titles for release-please ([#35](https://github.com/chrischall/artsonia-mcp/issues/35)) ([af66251](https://github.com/chrischall/artsonia-mcp/commit/af6625129995c21db6b0bed2bde9f2ee4b73eeb0))
+
 ## [0.6.0](https://github.com/chrischall/artsonia-mcp/compare/v0.5.0...v0.6.0) (2026-06-13)
 
 
