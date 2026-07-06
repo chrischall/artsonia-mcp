@@ -31,11 +31,10 @@ Two transport modes, selected by `ARTSONIA_TRANSPORT`:
 src/
   index.ts                # Entry — runMcp({name,version,banner,tools}); wires the 8 register*Tools modules over the client singleton
   client.ts               # ArtsoniaClient: fetchHtml() (GET) / write() (POST). Owns the two-mode split + dotenv load + client/AuthManager singleton
-  auth.ts                 # AuthManager: username/password login + looksUnauthenticated(); delegates session lifecycle to CookieSessionManager
-  cookies.ts              # CookieJar: minimal name=value jar for the Cookie header; parses Set-Cookie, detects deletion (empty value + 1970 expiry)
+  auth.ts                 # AuthManager: username/password login + looksUnauthenticated(); delegates session lifecycle to CookieSessionManager; jar is the shared CookieJar from @chrischall/mcp-utils (absorb()/header(); deletion = Max-Age<=0 or pre-2000 Expires)
   transport.ts            # ArtsoniaRequest/Response/Transport types, ARTSONIA_ORIGIN, makeTransport() (picks fetch vs fetchproxy by env)
   transport-fetch.ts      # FetchArtsoniaTransport: default Node fetch; manual redirect on login POST, follow on reads; 30s timeout
-  transport-fetchproxy.ts # FetchproxyArtsoniaTransport: usesBrowserSession=true; lazy-imports @fetchproxy/server, single-flight listen() on the shared port
+  transport-fetchproxy.ts # FetchproxyArtsoniaTransport: usesBrowserSession=true; thin adapter over createFetchproxyTransport (@chrischall/mcp-utils/fetchproxy), lazy-imported + memoized one-time start on the shared port
   parse.ts                # node-html-parser scrapers: parseStudents, parseNotifications, parsePortfolio, parseArtwork, parseFans, parseFeedback, parseAwards, parseProfile + artworkImageUrl()
   version.ts              # VERSION constant (x-release-please-version marker)
   tools/
@@ -94,7 +93,7 @@ Notable args:
 - **One field in a master form ⇒ read-modify-write.** The profile page is a single `#TheForm` carrying name/email/password/opt-ins. `set_notifications` reads the whole form, flips only the requested opt-in(s), and re-sends every other field verbatim (preserving `DidChangePassword="N"`). **Password fields (`OldPassword`/`NewPassword`/`NewPassword2`) are always blanked — never send a password.**
 - **JS-driven login.** The login flow / form field names (`Username`/`Password`/`Action=login`, checkbox `Y` values, etc.) were captured by instrumentation against the live site, not from a documented API — scraping selectors and field names are empirical and can break if the markup changes.
 - **CookieSessionManager single-flight + browser-session skip.** Direct mode delegates concurrent-login de-duplication and the one-replay-on-expiry to the shared manager. The fetchproxy/browser-session path never touches `AuthManager`/`withSession` — the browser tab carries the session and server-side login is skipped (`usesBrowserSession`), so `doLogin`'s 302+Location success marker (which never appears when the browser follows the redirect itself) is irrelevant there.
-- **Lazy fetchproxy import.** `@fetchproxy/server` is imported only via a lazy `import()` inside the fetchproxy transport (and `import type` elsewhere, erased at build). The bundled `.mcpb` externalizes it, so an eager top-level import would crash the server at load in the default `fetch` transport.
+- **Lazy fetchproxy import.** The fetchproxy stack is reached only via a lazy `import('@chrischall/mcp-utils/fetchproxy')` inside the fetchproxy transport (and `import type` elsewhere, erased at build). The bundled `.mcpb` externalizes BOTH `@fetchproxy/server` and the `@chrischall/mcp-utils/fetchproxy` subpath — the subpath eagerly imports `@fetchproxy/server`, so bundling it would hoist that import to the bundle's top level and crash the server at load in the default `fetch` transport.
 - **Comment-item markup is UNVERIFIED** (see note in `parse.ts`): 0-comment pages show no comment elements, so the `.comment` selector degrades to `[]` without throwing but hasn't been confirmed against an artwork that has comments.
 
 ## Versioning
@@ -168,5 +167,5 @@ When asked to address the auto-review comments / review findings on a PR:
 - **Don't send a password.** `set_notifications` blanks all password fields; auth lives in env vars (direct) or the browser session (fetchproxy), never inline.
 - **Don't paste real cookies or credentials into tests.** Mock at the `ArtsoniaClient` / transport boundary; the live login was instrumented, not embedded.
 - **Don't break the "no env vars set" smoke path.** The server must boot cleanly so MCP hosts can complete install-time `tools/list` — the missing-creds error is deferred to the first tool call.
-- **Don't eager-import `@fetchproxy/server`.** Keep it behind the lazy `import()` so the default `fetch` transport (and the externalized `.mcpb` bundle) never touch it.
+- **Don't eager-import `@fetchproxy/server` or `@chrischall/mcp-utils/fetchproxy`.** Keep them behind the lazy `import()` (and keep both in the bundle script's `--external` list) so the default `fetch` transport (and the externalized `.mcpb` bundle) never touch them.
 - **Don't change the shared fetchproxy port** (`37149`, `ARTSONIA_WS_PORT` default).

@@ -1,6 +1,5 @@
-import { readEnvVar, McpToolError } from '@chrischall/mcp-utils';
+import { readEnvVar, McpToolError, CookieJar } from '@chrischall/mcp-utils';
 import { CookieSessionManager } from '@chrischall/mcp-utils/session';
-import { CookieJar } from './cookies.js';
 import type { ArtsoniaResponse, ArtsoniaTransport } from './transport.js';
 
 const LOGIN_PATH = '/members/login.asp';
@@ -118,7 +117,7 @@ export class AuthManager {
       body,
       redirect: 'manual',
     });
-    jar.setFromHeaders(res.setCookie);
+    jar.absorb(res.setCookie);
     const redirectedToDest = (res.status === 301 || res.status === 302) && !!res.location && !/login\.asp/i.test(res.location);
     if (!redirectedToDest || jar.size === 0) {
       throw new McpToolError(
@@ -131,7 +130,7 @@ export class AuthManager {
 
   /** Absorb refreshed cookies from a normal response (post-redirect Set-Cookie). */
   absorb(setCookie: string[]): void {
-    if (setCookie.length) this.session.current?.jar.setFromHeaders(setCookie);
+    if (setCookie.length) this.session.current?.jar.absorb(setCookie);
   }
 
   /** Mark the session dead so the next ensureLogin re-authenticates. */
