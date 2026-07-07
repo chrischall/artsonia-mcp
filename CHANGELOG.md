@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.2](https://github.com/chrischall/artsonia-mcp/compare/v0.6.1...v0.6.2) (2026-07-07)
+
+
+### Bug Fixes
+
+* bump @chrischall/mcp-utils to ^0.12.0 ([#49](https://github.com/chrischall/artsonia-mcp/issues/49)) ([a5da994](https://github.com/chrischall/artsonia-mcp/commit/a5da9942913f0236b7dbfe82ed1577b71cb5a253))
+
+
+### Refactor
+
+* shared CookieJar + createFetchproxyTransport; bump @fetchproxy/server to 1.3 ([#46](https://github.com/chrischall/artsonia-mcp/issues/46)) ([9a14e28](https://github.com/chrischall/artsonia-mcp/commit/9a14e280d687f581403e0f2fe3c337a051161fc5))
+
+
+### Documentation
+
+* document first-party dependency-bump label exception ([#50](https://github.com/chrischall/artsonia-mcp/issues/50)) ([88bd109](https://github.com/chrischall/artsonia-mcp/commit/88bd109e117bc17a4f3d0dd5c2a34af6095ce176))
+
 ## [0.6.1](https://github.com/chrischall/artsonia-mcp/compare/v0.6.0...v0.6.1) (2026-07-03)
 
 
