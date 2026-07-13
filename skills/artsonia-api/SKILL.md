@@ -29,15 +29,22 @@ instead of a running server.
 export ARTSONIA_USERNAME=you@example.com
 export ARTSONIA_PASSWORD='your-password'   # or: op read "op://Private/Artsonia/password"
 JAR=~/.cache/artsonia-cookies.txt
+mkdir -p ~/.cache   # ensure the jar's directory exists on a fresh box
 : > "$JAR"   # fresh jar
 ```
 
 ## Log in (get the session cookie)
 
+Read the password from stdin (`Password@-`) instead of putting it on the
+command line — `--data-urlencode name=value` puts `value` in curl's argv,
+which any local user can read via `ps`/`/proc` while the process runs. This
+mirrors how the MCP itself sends the password: only in the POST body, never
+on a command line.
+
 ```sh
-curl -s -c "$JAR" -b "$JAR" -L \
+printf '%s' "$ARTSONIA_PASSWORD" | curl -s -c "$JAR" -b "$JAR" -L \
   --data-urlencode "Username=$ARTSONIA_USERNAME" \
-  --data-urlencode "Password=$ARTSONIA_PASSWORD" \
+  --data-urlencode "Password@-" \
   --data-urlencode "TargetUrl=/members/" \
   --data-urlencode "Action=login" \
   -o /tmp/artsonia-login.html -w '%{http_code} %{url_effective}\n' \
