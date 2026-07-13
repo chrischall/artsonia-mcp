@@ -16,6 +16,6 @@
     "mcp",
     "parent"
   ],
-  "skills": "./skills/artsonia-mcp/SKILL.md",
+  "skills": "./skills/",
   "mcp": "./.mcp.json"
 }
