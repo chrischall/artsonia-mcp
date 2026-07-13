@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/chrischall/artsonia-mcp/compare/v0.6.2...v0.7.0) (2026-07-13)
+
+
+### Features
+
+* **skill:** add artsonia curl access skill ([#55](https://github.com/chrischall/artsonia-mcp/issues/55)) ([93e9e08](https://github.com/chrischall/artsonia-mcp/commit/93e9e081a77c2387dd57e77e004987b2ebd31e6f))
+
+
+### Bug Fixes
+
+* **skill:** harden artsonia-api SKILL.md setup and login curl ([#58](https://github.com/chrischall/artsonia-mcp/issues/58)) ([5affe36](https://github.com/chrischall/artsonia-mcp/commit/5affe36b1b94b3a2539e7f94def9ebc30974cef3)), closes [#56](https://github.com/chrischall/artsonia-mcp/issues/56)
+
 ## [0.6.2](https://github.com/chrischall/artsonia-mcp/compare/v0.6.1...v0.6.2) (2026-07-07)
 
 
