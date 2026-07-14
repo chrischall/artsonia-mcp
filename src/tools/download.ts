@@ -1,11 +1,50 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { mkdir, writeFile, utimes } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join, basename, dirname, relative } from 'node:path';
 import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf, NumericIdString, mapWithConcurrency } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
+
+/**
+ * An extra MCP content block the download IO can append to the tool result: an
+ * inline image (the Worker's base64 artwork bytes) or a text note (e.g. the
+ * inline IO's "images omitted — over the response cap" warning).
+ */
+export type DownloadContentBlock =
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'text'; text: string };
+
+/**
+ * The filesystem operations `artsonia_download_artwork` needs, abstracted so a
+ * Worker deployment can supply an inline (no-disk) implementation. `node:fs`
+ * lives ONLY behind this boundary — `download.ts` imports none of it — so the
+ * hosted Cloudflare connector can register the download tool with an inline IO
+ * that returns image bytes as MCP content blocks instead of writing to disk.
+ * The stdio server injects the disk-backed `NodeDownloadIO` (`./download-io.ts`).
+ */
+export interface DownloadIO {
+  /**
+   * Whether `writeFile` persists to a location the caller can later retrieve.
+   * The disk IO is `true`; the Worker's inline IO is `false` (image bytes are
+   * returned inline, but `.json` sidecars/`index.json` have nowhere to go). When
+   * `false`, the tool omits the `index_file`/`metadata_count` fields rather than
+   * advertise files it never wrote (honesty contract — see CLAUDE.md).
+   */
+  readonly persistsFiles: boolean;
+  /** Create `dir` and any missing parents (recursive mkdir). */
+  mkdirp(dir: string): Promise<void>;
+  /** Whether a file already exists at `path` (drives `skip_existing`). */
+  exists(path: string): boolean;
+  /** Persist `bytes` at `path` (an image `.jpg` or a `.json` sidecar/index). */
+  writeFile(path: string, bytes: Buffer): Promise<void>;
+  /** Set `path`'s modified time (no-op where filesystem mtimes don't apply). */
+  setMtime(path: string, mtime: Date): Promise<void>;
+  /**
+   * MCP content blocks to append to the tool result. The disk IO returns `[]`;
+   * the Worker's inline IO returns each written image as a base64 image block.
+   */
+  extraContent(): DownloadContentBlock[];
+}
 
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
 export const FETCH_CONCURRENCY = 6;
@@ -106,7 +145,7 @@ type Outcome =
   | { kind: 'skipped'; artwork_id: string; file: string }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
-export function registerDownloadTools(server: McpServer, client: ArtsoniaClient): void {
+export function registerDownloadTools(server: McpServer, client: ArtsoniaClient, io: DownloadIO): void {
   server.registerTool(
     'artsonia_download_artwork',
     {
@@ -143,11 +182,15 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       // both ride the same up-front detail fetch as descriptive names — but only
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
+      // write_metadata only earns a detail fetch where its sidecars can actually
+      // be written (io.persistsFiles); on the inline Worker IO they're dropped,
+      // so skip the fetch. embed_metadata still needs detail (it embeds into the
+      // returned image bytes, which works on either IO).
       const needDetail =
         project !== undefined ||
         grade !== undefined ||
         /\{(title|project|grade)\}/.test(templates) ||
-        ((write_metadata || embed_metadata) && confirm === true);
+        (((write_metadata && io.persistsFiles) || embed_metadata) && confirm === true);
 
       /** Full target path for an item (subfolders from path_template + filename). */
       const fileOf = (it: Item, date: string): string => {
@@ -232,12 +275,12 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       }
 
       // 5. Download (bounded concurrency).
-      await mkdir(destDir, { recursive: true });
+      await io.mkdirp(destDir);
       const outcomes = await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
         try {
           // Names/paths without {date}/{school_year} are known up-front → skip before fetching.
           let file = deferredNaming ? null : fileOf(it, '');
-          if (file && skip_existing && existsSync(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+          if (file && skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
 
           const res = await fetch(artworkImageUrl(it.artwork_id, resolution));
           if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
@@ -250,7 +293,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
           const date = sourceDate ? sourceDate.toISOString().slice(0, 10) : '';
           if (!file) {
             file = fileOf(it, date);
-            if (skip_existing && existsSync(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+            if (skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
           }
 
           let buf: Buffer = Buffer.from(await res.arrayBuffer());
@@ -266,11 +309,11 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
               embedded = false;
             }
           }
-          if (path_template !== undefined) await mkdir(dirname(file), { recursive: true });
-          await writeFile(file, buf);
+          if (path_template !== undefined) await io.mkdirp(dirname(file));
+          await io.writeFile(file, buf);
           // date_source / timestamp reflect the file's ACTUAL mtime.
           const fromSource = set_mtime_from_source && sourceDate !== null;
-          if (fromSource) await utimes(file, sourceDate!, sourceDate!);
+          if (fromSource) await io.setMtime(file, sourceDate!);
           return {
             kind: 'downloaded',
             artwork_id: it.artwork_id,
@@ -292,12 +335,14 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
       const isPrivate = (artworkId: string) => byId.get(artworkId)?.is_private ?? false;
 
       // 6. Optional sidecar manifest of what's on disk. Written whenever
-      // write_index is requested (even if everything was skipped on a re-run),
-      // so the response always carries index_file rather than silently omitting
-      // it. Lists BOTH freshly-downloaded and already-present (skipped) items —
-      // it's an inventory of what's in `dest`, not just this run's downloads.
+      // write_index is requested on a persisting IO (even if everything was
+      // skipped on a re-run), so the response always carries index_file rather
+      // than silently omitting it. Lists BOTH freshly-downloaded and
+      // already-present (skipped) items — it's an inventory of what's in `dest`,
+      // not just this run's downloads. Skipped entirely on the inline Worker IO
+      // (no filesystem): index_file is then omitted, not advertised unwritten.
       let indexFile: string | undefined;
-      if (write_index) {
+      if (write_index && io.persistsFiles) {
         const onDisk: Array<{ artwork_id: string; file: string; date?: string }> = [
           ...downloaded.map((d) => ({
             artwork_id: d.artwork_id,
@@ -324,15 +369,17 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
           }),
         };
         indexFile = join(destDir, 'index.json');
-        await writeFile(indexFile, JSON.stringify(manifest, null, 2));
+        await io.writeFile(indexFile, Buffer.from(JSON.stringify(manifest, null, 2)));
       }
 
       // 7. Optional per-artwork metadata sidecars: <image-name>.json next to each
       // image (downloaded AND already-present), carrying the artwork's comments
       // (from its detail page — same source as artsonia_list_comments) and the
       // student's teacher feedback for it (same source as artsonia_get_feedback).
+      // Skipped on the inline Worker IO (no filesystem): metadata_count is then
+      // omitted rather than reported for sidecars that were never written.
       let metadataCount: number | undefined;
-      if (write_metadata) {
+      if (write_metadata && io.persistsFiles) {
         const feedbackByArt = new Map<string, Array<{ message: string; posted_by: string; is_read: boolean }>>();
         for (const f of parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`))) {
           if (!f.artwork_id) continue;
@@ -353,7 +400,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
             comments: it?.comments ?? [],
             feedback: feedbackByArt.get(o.artwork_id) ?? [],
           };
-          await writeFile(o.file.replace(/\.jpg$/i, '.json'), JSON.stringify(sidecar, null, 2));
+          await io.writeFile(o.file.replace(/\.jpg$/i, '.json'), Buffer.from(JSON.stringify(sidecar, null, 2)));
         });
         metadataCount = onDisk.length;
       }
@@ -378,7 +425,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         }
       }
 
-      return textResult({
+      const result = textResult({
         downloaded_count: downloaded.length,
         skipped_count: skipped.length,
         failed_count: failed.length,
@@ -396,6 +443,13 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient)
         ...(metadataCount !== undefined ? { metadata_count: metadataCount } : {}),
         ...(embed_metadata ? { embedded_count: downloaded.filter((d) => d.embedded).length } : {}),
       });
+      // On the hosted connector there is no filesystem: the inline IO returns the
+      // downloaded image bytes as MCP content blocks, appended alongside the JSON
+      // summary. The disk-backed NodeDownloadIO returns [] here (files are on
+      // disk), so the stdio result is byte-for-byte unchanged.
+      const extra = io.extraContent();
+      if (extra.length) result.content.push(...extra);
+      return result;
     },
   );
 }

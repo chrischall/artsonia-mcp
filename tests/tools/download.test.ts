@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import * as piexif from 'piexif-ts';
 import { registerDownloadTools, buildFilename, buildRelPath } from '../../src/tools/download.js';
+import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { client } from '../../src/client.js';
 import { createTestHarness } from '../helpers.js';
 import { tinyJpeg, parseIptc } from '../jpeg-fixture.js';
@@ -132,7 +133,7 @@ describe('buildRelPath', () => {
 
 describe('artsonia_download_artwork', () => {
   it('setup + registers the tool', async () => {
-    harness = await createTestHarness((s) => registerDownloadTools(s, client));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, new NodeDownloadIO()));
     expect((await harness.listTools()).map((t) => t.name)).toContain('artsonia_download_artwork');
   });
 

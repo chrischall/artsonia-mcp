@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { makeTransport } from '../src/transport.js';
+import { makeTransport } from '../src/make-transport.js';
 
 // The env-selected transport switch. Instantiating the fetchproxy transport is
 // side-effect free (the @chrischall/mcp-utils/fetchproxy adapter — and with it

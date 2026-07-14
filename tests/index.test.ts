@@ -8,6 +8,7 @@ import { registerFanTools } from '../src/tools/fans.js';
 import { registerFeedbackTools } from '../src/tools/feedback.js';
 import { registerAccountTools } from '../src/tools/account.js';
 import { registerDownloadTools } from '../src/tools/download.js';
+import { NodeDownloadIO } from '../src/tools/download-io.js';
 import { registerWriteTools } from '../src/tools/writes.js';
 
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
@@ -22,7 +23,7 @@ describe('full tool surface', () => {
       registerFanTools(s, client);
       registerFeedbackTools(s, client);
       registerAccountTools(s, client);
-      registerDownloadTools(s, client);
+      registerDownloadTools(s, client, new NodeDownloadIO());
       registerWriteTools(s, client);
     });
     const names = (await harness.listTools()).map((t) => t.name).sort();

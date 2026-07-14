@@ -5,3 +5,5 @@ dist/
 !.env.example
 *.tgz
 coverage/
+.dev.vars
+.wrangler/
