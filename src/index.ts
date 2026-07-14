@@ -9,6 +9,7 @@ import { registerFanTools } from './tools/fans.js';
 import { registerFeedbackTools } from './tools/feedback.js';
 import { registerAccountTools } from './tools/account.js';
 import { registerDownloadTools } from './tools/download.js';
+import { NodeDownloadIO } from './tools/download-io.js';
 import { registerWriteTools } from './tools/writes.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -23,7 +24,7 @@ const tools: Array<(server: McpServer) => void> = [
   (s) => registerFanTools(s, client),
   (s) => registerFeedbackTools(s, client),
   (s) => registerAccountTools(s, client),
-  (s) => registerDownloadTools(s, client),
+  (s) => registerDownloadTools(s, client, new NodeDownloadIO()),
   (s) => registerWriteTools(s, client),
 ];
 

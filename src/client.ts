@@ -1,93 +1,21 @@
-import { loadDotenvSafely, readEnvVar, McpToolError } from '@chrischall/mcp-utils';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { AuthManager, looksUnauthenticated } from './auth.js';
-import { makeTransport, type ArtsoniaResponse, type ArtsoniaTransport } from './transport.js';
+import { readEnvVar } from '@chrischall/mcp-utils';
+import { AuthManager } from './auth.js';
+import { makeTransport } from './make-transport.js';
+import { ArtsoniaClient } from './client-core.js';
 
-export interface ArtsoniaClientOptions {
-  transport: ArtsoniaTransport;
-  auth: AuthManager;
-}
+// Re-export the worker-safe client surface so existing importers
+// (`import { ArtsoniaClient } from './client.js'`, the tool registrars' type
+// imports, tests) keep working unchanged.
+export { ArtsoniaClient, createDirectClient, type ArtsoniaClientOptions } from './client-core.js';
 
-// Thin, tool-facing API over a transport + AuthManager. Reads go through
-// fetchHtml(); writes through write(). Both ensure a live session and retry
-// once across a re-login if the response looks unauthenticated.
-export class ArtsoniaClient {
-  private readonly transport: ArtsoniaTransport;
-  private readonly auth: AuthManager;
-
-  constructor(opts: ArtsoniaClientOptions) {
-    this.transport = opts.transport;
-    this.auth = opts.auth;
-  }
-
-  async fetchHtml(path: string): Promise<string> {
-    return (await this.requestWithSession('GET', path)).body;
-  }
-
-  async write(path: string, body: string): Promise<ArtsoniaResponse> {
-    return this.requestWithSession('POST', path, body);
-  }
-
-  private async requestWithSession(method: 'GET' | 'POST', path: string, body?: string): Promise<ArtsoniaResponse> {
-    // fetchproxy transport mode: the request rides the user's already-signed-in
-    // browser tab, which carries the session. The server-side username/password
-    // login does NOT apply (no jar to fill, and doLogin's 302+Location success
-    // marker never appears — the browser follows the redirect itself, so
-    // ensureLogin would always throw "Artsonia login failed"). Send straight
-    // through; if the browser isn't signed in, the response looks like the login
-    // page and we surface a browser-specific hint instead of a credential one.
-    if (this.transport.usesBrowserSession) {
-      const res = await this.send(method, path, body);
-      if (looksUnauthenticated(res)) {
-        throw new McpToolError('Not signed in to Artsonia in your browser.', {
-          hint: 'fetchproxy mode uses your signed-in browser session — no ARTSONIA_USERNAME/PASSWORD needed. Open www.artsonia.com in the bridged browser tab and sign in, then retry.',
-        });
-      }
-      if (res.status >= 400) {
-        throw new McpToolError(`Artsonia request failed: ${method} ${path} -> HTTP ${res.status}`, {
-          hint: 'Retry; if it persists the page may have moved or requires a different account.',
-        });
-      }
-      return res;
-    }
-
-    // Direct mode: the manager owns the one-replay-on-expiry. It ensures a live
-    // session, runs the request, and on a redirect-away-to-login (isExpired)
-    // invalidates + single-flight re-logs-in + replays the request EXACTLY once.
-    // What surfaces here is the FINAL response: still login-looking means either
-    // a persistent expiry or a failed re-login — both reported as a sign-in error.
-    const res = await this.auth.withSession(() => this.send(method, path, body));
-    if (looksUnauthenticated(res)) {
-      throw new McpToolError('Artsonia session could not be (re)established after re-login.', {
-        hint: 'Your ARTSONIA_USERNAME / ARTSONIA_PASSWORD may be wrong, or the session keeps expiring. Verify the credentials.',
-      });
-    }
-    this.auth.absorb(res.setCookie);
-    if (res.status >= 400) {
-      throw new McpToolError(`Artsonia request failed: ${method} ${path} -> HTTP ${res.status}`, {
-        hint: 'Retry; if it persists the page may have moved or requires a different account.',
-      });
-    }
-    return res;
-  }
-
-  private send(method: 'GET' | 'POST', path: string, body?: string): Promise<ArtsoniaResponse> {
-    const headers: Record<string, string> = {};
-    // In browser-session (fetchproxy) mode the tab carries its own cookies; the
-    // server jar is empty, so don't override the browser's Cookie header.
-    if (!this.transport.usesBrowserSession) headers.Cookie = this.auth.cookieHeader();
-    if (method === 'POST') headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    return this.transport.request({ method, path, headers, body, redirect: method === 'POST' ? 'manual' : 'follow' });
-  }
-}
-
-// Module singleton, constructed in this module (not index.ts) so the
+// The env-driven stdio singleton. Constructed here (not index.ts) so the
 // deferred-config-error pattern holds: the server boots and answers tools/list
-// even with no creds; the error surfaces on the first tool call.
-const __dirname = dirname(fileURLToPath(import.meta.url));
-await loadDotenvSafely({ path: join(__dirname, '..', '.env'), override: false });
-
+// even with no creds; the error surfaces on the first tool call. It uses
+// `makeTransport()`, which honours `ARTSONIA_TRANSPORT` (direct fetch by
+// default, or the fetchproxy browser-bridge fallback) — the reason this module
+// (and NOT client-core.ts) carries the fetchproxy dependency, keeping it out of
+// the hosted Worker bundle, which never imports client.ts. The guarded `.env`
+// load lives in client-core.ts and has already run by the time this executes.
 const transport = await makeTransport();
 export const client = new ArtsoniaClient({
   transport,

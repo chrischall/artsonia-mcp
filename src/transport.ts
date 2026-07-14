@@ -1,5 +1,3 @@
-import { readEnvVar } from '@chrischall/mcp-utils';
-
 export interface ArtsoniaRequest {
   method: 'GET' | 'POST';
   /** Path-and-query relative to https://www.artsonia.com, or an absolute URL. */
@@ -36,12 +34,10 @@ export interface ArtsoniaTransport {
 
 export const ARTSONIA_ORIGIN = 'https://www.artsonia.com';
 
-export async function makeTransport(): Promise<ArtsoniaTransport> {
-  const mode = readEnvVar('ARTSONIA_TRANSPORT') ?? 'fetch';
-  if (mode === 'fetchproxy') {
-    const { FetchproxyArtsoniaTransport } = await import('./transport-fetchproxy.js');
-    return new FetchproxyArtsoniaTransport();
-  }
-  const { FetchArtsoniaTransport } = await import('./transport-fetch.js');
-  return new FetchArtsoniaTransport();
-}
+// NOTE: `makeTransport()` (the env-driven direct-vs-fetchproxy selector) lives in
+// `./make-transport.ts`, NOT here. This module is a LEAF — pure types + the
+// origin constant, with no import of `@fetchproxy/server`. The hosted Cloudflare
+// Worker's module graph reaches this file (via transport-fetch → client-core),
+// so keeping the fetchproxy dynamic import out of it is what stops the bridge
+// from being pulled into the Worker bundle. Only the stdio singleton (client.ts)
+// imports make-transport.ts, and the Worker never imports client.ts.
