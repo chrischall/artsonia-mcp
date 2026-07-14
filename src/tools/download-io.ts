@@ -7,6 +7,8 @@ import type { DownloadContentBlock, DownloadIO } from './download.js';
 // only, so the hosted Cloudflare Worker (which injects the inline IO instead)
 // never pulls `node:fs` in through the download tool.
 export class NodeDownloadIO implements DownloadIO {
+  readonly persistsFiles = true;
+
   async mkdirp(dir: string): Promise<void> {
     await mkdir(dir, { recursive: true });
   }

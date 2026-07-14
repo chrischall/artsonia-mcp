@@ -5,12 +5,14 @@ import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf, Nume
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
 
-/** An extra MCP content block the download IO can append to the tool result. */
-export interface DownloadContentBlock {
-  type: 'image';
-  data: string;
-  mimeType: string;
-}
+/**
+ * An extra MCP content block the download IO can append to the tool result: an
+ * inline image (the Worker's base64 artwork bytes) or a text note (e.g. the
+ * inline IO's "images omitted — over the response cap" warning).
+ */
+export type DownloadContentBlock =
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'text'; text: string };
 
 /**
  * The filesystem operations `artsonia_download_artwork` needs, abstracted so a
@@ -21,6 +23,14 @@ export interface DownloadContentBlock {
  * The stdio server injects the disk-backed `NodeDownloadIO` (`./download-io.ts`).
  */
 export interface DownloadIO {
+  /**
+   * Whether `writeFile` persists to a location the caller can later retrieve.
+   * The disk IO is `true`; the Worker's inline IO is `false` (image bytes are
+   * returned inline, but `.json` sidecars/`index.json` have nowhere to go). When
+   * `false`, the tool omits the `index_file`/`metadata_count` fields rather than
+   * advertise files it never wrote (honesty contract — see CLAUDE.md).
+   */
+  readonly persistsFiles: boolean;
   /** Create `dir` and any missing parents (recursive mkdir). */
   mkdirp(dir: string): Promise<void>;
   /** Whether a file already exists at `path` (drives `skip_existing`). */
@@ -172,11 +182,15 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // both ride the same up-front detail fetch as descriptive names — but only
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
+      // write_metadata only earns a detail fetch where its sidecars can actually
+      // be written (io.persistsFiles); on the inline Worker IO they're dropped,
+      // so skip the fetch. embed_metadata still needs detail (it embeds into the
+      // returned image bytes, which works on either IO).
       const needDetail =
         project !== undefined ||
         grade !== undefined ||
         /\{(title|project|grade)\}/.test(templates) ||
-        ((write_metadata || embed_metadata) && confirm === true);
+        (((write_metadata && io.persistsFiles) || embed_metadata) && confirm === true);
 
       /** Full target path for an item (subfolders from path_template + filename). */
       const fileOf = (it: Item, date: string): string => {
@@ -321,12 +335,14 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       const isPrivate = (artworkId: string) => byId.get(artworkId)?.is_private ?? false;
 
       // 6. Optional sidecar manifest of what's on disk. Written whenever
-      // write_index is requested (even if everything was skipped on a re-run),
-      // so the response always carries index_file rather than silently omitting
-      // it. Lists BOTH freshly-downloaded and already-present (skipped) items —
-      // it's an inventory of what's in `dest`, not just this run's downloads.
+      // write_index is requested on a persisting IO (even if everything was
+      // skipped on a re-run), so the response always carries index_file rather
+      // than silently omitting it. Lists BOTH freshly-downloaded and
+      // already-present (skipped) items — it's an inventory of what's in `dest`,
+      // not just this run's downloads. Skipped entirely on the inline Worker IO
+      // (no filesystem): index_file is then omitted, not advertised unwritten.
       let indexFile: string | undefined;
-      if (write_index) {
+      if (write_index && io.persistsFiles) {
         const onDisk: Array<{ artwork_id: string; file: string; date?: string }> = [
           ...downloaded.map((d) => ({
             artwork_id: d.artwork_id,
@@ -360,8 +376,10 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // image (downloaded AND already-present), carrying the artwork's comments
       // (from its detail page — same source as artsonia_list_comments) and the
       // student's teacher feedback for it (same source as artsonia_get_feedback).
+      // Skipped on the inline Worker IO (no filesystem): metadata_count is then
+      // omitted rather than reported for sidecars that were never written.
       let metadataCount: number | undefined;
-      if (write_metadata) {
+      if (write_metadata && io.persistsFiles) {
         const feedbackByArt = new Map<string, Array<{ message: string; posted_by: string; is_read: boolean }>>();
         for (const f of parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`))) {
           if (!f.artwork_id) continue;
