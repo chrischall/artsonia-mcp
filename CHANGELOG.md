@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/chrischall/artsonia-mcp/compare/v0.7.0...v0.8.0) (2026-07-14)
+
+
+### Features
+
+* add hosted Cloudflare Worker connector ([#59](https://github.com/chrischall/artsonia-mcp/issues/59)) ([e3060aa](https://github.com/chrischall/artsonia-mcp/commit/e3060aae165e4cd70520855b50b1f7b9a7544bbb))
+
 ## [0.7.0](https://github.com/chrischall/artsonia-mcp/compare/v0.6.2...v0.7.0) (2026-07-13)
 
 
