@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.1](https://github.com/chrischall/artsonia-mcp/compare/v0.8.0...v0.8.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* **ci:** run the Workers test pool in CI ([#66](https://github.com/chrischall/artsonia-mcp/issues/66)) ([97a4f97](https://github.com/chrischall/artsonia-mcp/commit/97a4f97e52bd8da27769f8394be963c84a12263e))
+
+
+### Documentation
+
+* replace duplicated fleet policy with a pointer ([#64](https://github.com/chrischall/artsonia-mcp/issues/64)) ([cf13fa5](https://github.com/chrischall/artsonia-mcp/commit/cf13fa583a31494e514f8bf1320cc82ab3eea050))
+
 ## [0.8.0](https://github.com/chrischall/artsonia-mcp/compare/v0.7.0...v0.8.0) (2026-07-14)
 
 
