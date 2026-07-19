@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/chrischall/artsonia-mcp/compare/v0.8.1...v0.8.2) (2026-07-19)
+
+
+### Bug Fixes
+
+* **deps:** move to workers-oauth-provider 0.8.x ([#67](https://github.com/chrischall/artsonia-mcp/issues/67)) ([983d7ed](https://github.com/chrischall/artsonia-mcp/commit/983d7ed705f3ae306a3d5032845820de5827cea9))
+
 ## [0.8.1](https://github.com/chrischall/artsonia-mcp/compare/v0.8.0...v0.8.1) (2026-07-19)
 
 
