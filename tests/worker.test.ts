@@ -50,7 +50,16 @@ describe('Artsonia Cloudflare connector — OAuth surface', () => {
   it('GET /authorize renders the Artsonia login page with the email + password fields', async () => {
     // No `client_id` query param: the login page renders without needing a
     // registered OAuth client, which is all we verify here.
-    const res = await SELF.fetch('https://example.com/authorize?response_type=code&state=abc');
+    //
+    // `redirect_uri` IS required, though — do not remove it. Since
+    // workers-oauth-provider 0.8.x, `parseAuthRequest` calls
+    // `validateRedirectUriScheme()` unconditionally, and that rejects any
+    // value with no scheme, including the empty string an absent
+    // `redirect_uri` becomes ("Invalid redirect URI").
+    const res = await SELF.fetch(
+      'https://example.com/authorize?response_type=code&state=abc' +
+        `&redirect_uri=${encodeURIComponent('https://example.com/callback')}`,
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
