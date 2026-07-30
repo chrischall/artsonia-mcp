@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthManager } from '../src/auth.js';
 import type { ArtsoniaRequest, ArtsoniaResponse, ArtsoniaTransport } from '../src/transport.js';
 
@@ -10,6 +10,20 @@ function fakeTransport(handler: (req: ArtsoniaRequest) => ArtsoniaResponse): Art
 const okLogin = (): ArtsoniaResponse => ({ status: 302, body: '', url: 'https://www.artsonia.com/members/login.asp', setCookie: ['SID=good; path=/; HttpOnly'], location: '/members/' });
 
 describe('AuthManager', () => {
+  // Hermetic env: the "missing creds" cases assert on AuthManager's own
+  // config error, which falls through to readEnvVar('ARTSONIA_USERNAME' /
+  // '_PASSWORD'). Without this, a developer shell that exports those vars
+  // makes `new AuthManager(t, {})` silently authenticate and the two
+  // missing-creds tests fail (see issue #74). Blank them for every test;
+  // the cred-carrying tests pass creds via opts, so they're unaffected.
+  beforeEach(() => {
+    vi.stubEnv('ARTSONIA_USERNAME', '');
+    vi.stubEnv('ARTSONIA_PASSWORD', '');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('throws a deferred config error when creds are missing', async () => {
     const t = fakeTransport(okLogin);
     const auth = new AuthManager(t, {}); // no username/password
