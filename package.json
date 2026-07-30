@@ -2,7 +2,7 @@
   "name": "artsonia-mcp",
   "version": "0.8.2",
   "mcpName": "io.github.chrischall/artsonia-mcp",
-  "description": "Artsonia MCP server for Claude — developed and maintained by AI (Claude Code)",
+  "description": "Artsonia MCP server for Claude \u2014 developed and maintained by AI (Claude Code)",
   "author": "Claude Code (AI) <https://www.anthropic.com/claude>",
   "repository": {
     "type": "git",
@@ -46,8 +46,8 @@
     "worker:test": "vitest run --config vitest.workers.config.ts"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^0.13.0",
-    "@fetchproxy/server": "^1.3.4",
+    "@chrischall/mcp-utils": "^0.14.0",
+    "@fetchproxy/server": "^1.7.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.0",
     "node-html-parser": "^9.0.0",
