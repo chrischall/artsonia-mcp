@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/chrischall/artsonia-mcp/compare/v0.8.2...v0.8.3) (2026-07-30)
+
+
+### Bug Fixes
+
+* **deps:** bump @fetchproxy/* to 1.7.0 and @chrischall/mcp-utils to 0.14.0 ([#83](https://github.com/chrischall/artsonia-mcp/issues/83)) ([f174aca](https://github.com/chrischall/artsonia-mcp/commit/f174acad930d4e411a42cb2abc8a9d78f34123fa))
+
 ## [0.8.2](https://github.com/chrischall/artsonia-mcp/compare/v0.8.1...v0.8.2) (2026-07-19)
 
 
