@@ -46,7 +46,16 @@ describe('InlineDownloadIO', () => {
     expect(io.extraContent().filter((b) => b.type === 'image')).toHaveLength(1);
   });
 
-  it('persistsFiles is false (drives the honest omission of index_file/metadata_count on the Worker)', () => {
+  it('never touches the filesystem: mkdirp/setMtime are no-ops and exists() is always false', async () => {
+    const io = new InlineDownloadIO();
+    await expect(io.mkdirp('/nope/does/not/exist')).resolves.toBeUndefined();
+    await expect(io.setMtime('/nope/a.jpg', new Date())).resolves.toBeUndefined();
+    // Always false ⇒ `skip_existing` never skips (nothing the caller can reach
+    // persists between calls), even for a path that really does exist here.
+    expect(io.exists(import.meta.filename)).toBe(false);
+  });
+
+  it('persistsFiles is false (drives the honest omission of index_file/metadata_count)', () => {
     expect(new InlineDownloadIO().persistsFiles).toBe(false);
   });
 });
@@ -57,7 +66,7 @@ describe('NodeDownloadIO', () => {
   });
 });
 
-describe('artsonia_download_artwork on the inline (Worker) IO', () => {
+describe('artsonia_download_artwork on the inline IO', () => {
   const mockFetchHtml = vi.spyOn(client, 'fetchHtml');
   const mockFetch = vi.spyOn(globalThis, 'fetch');
   // Two artworks, newest-first.
