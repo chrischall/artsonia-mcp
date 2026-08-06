@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/chrischall/artsonia-mcp/compare/v0.8.3...v0.8.4) (2026-08-06)
+
+
+### Bug Fixes
+
+* **deps:** move to @fetchproxy/server 2.0.0 for the v3 handshake ([#93](https://github.com/chrischall/artsonia-mcp/issues/93)) ([d2277d0](https://github.com/chrischall/artsonia-mcp/commit/d2277d03cc23deb042f989f339fd957c2891cafa))
+
 ## [0.8.3](https://github.com/chrischall/artsonia-mcp/compare/v0.8.2...v0.8.3) (2026-07-30)
 
 
