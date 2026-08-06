@@ -95,3 +95,4 @@ Username/password auth using your Artsonia parent/fan account credentials. The s
 | `ARTSONIA_PASSWORD` | Yes | Your Artsonia account password |
 | `ARTSONIA_TRANSPORT` | No | Override transport: `stdio` (default), `sse`, or `fetchproxy` |
 | `ARTSONIA_WS_PORT` | No | WebSocket port when using `sse` transport |
+| `ARTSONIA_INLINE_DOWNLOADS` | No | Set to `1` on a hosted deployment to return `artsonia_download_artwork` images as inline base64 blocks instead of writing them to a disk the user can't reach. Leave unset for local installs. |

@@ -8,20 +8,18 @@ import type { DownloadContentBlock, DownloadIO } from './download.js';
 // `limit` or lower `resolution` — to retrieve them).
 export const MAX_INLINE_BYTES = 24 * 1024 * 1024; // 24 MiB raw (~32 MiB base64)
 
-// Filesystem-free download I/O for the hosted Cloudflare Worker, which has no
-// disk. Image writes (`.jpg`) are accumulated and returned as base64 MCP image
+// Filesystem-free download I/O, for a deployment whose disk the user cannot
+// reach. Image writes (`.jpg`) are accumulated and returned as base64 MCP image
 // content blocks alongside the tool's JSON summary; directory creation and mtime
 // setting are no-ops, and `.json` sidecars/index manifests are dropped (there is
 // nowhere to put them — `persistsFiles:false` makes the tool omit the
 // `index_file`/`metadata_count` fields rather than advertise files it never
 // wrote). `exists()` always returns false, so `skip_existing` never skips
-// (nothing persists between calls). Imports NO `node:fs`, so it is safe to bundle
-// into the Worker.
+// (nothing persists between calls). Imports NO `node:fs`.
 //
-// A single instance is registered ONCE per MCP session (per `ArtsoniaMcpAgent`
-// Durable Object), so it is REUSED across every `artsonia_download_artwork`
-// invocation — `extraContent()` therefore DRAINS its buffer on read so each call
-// returns only its own images, never a prior call's.
+// One instance is registered ONCE and REUSED across every
+// `artsonia_download_artwork` invocation, so `extraContent()` DRAINS its buffer
+// on read — each call returns only its own images, never a prior call's.
 export class InlineDownloadIO implements DownloadIO {
   readonly persistsFiles = false;
   private images: DownloadContentBlock[] = [];
@@ -34,7 +32,7 @@ export class InlineDownloadIO implements DownloadIO {
   constructor(private readonly maxInlineBytes: number = MAX_INLINE_BYTES) {}
 
   async mkdirp(_dir: string): Promise<void> {
-    /* no filesystem on the Worker */
+    /* no filesystem here */
   }
 
   exists(_path: string): boolean {
@@ -43,7 +41,7 @@ export class InlineDownloadIO implements DownloadIO {
 
   async writeFile(path: string, bytes: Buffer): Promise<void> {
     // Only image bytes are surfaced inline; JSON sidecars/index have nowhere to
-    // go on the Worker and are represented by the JSON summary instead.
+    // go here and are represented by the JSON summary instead.
     if (!/\.jpe?g$/i.test(path)) return;
     // Size guard: keep one inline response under the cap. An over-cap image is
     // dropped and counted so `extraContent()` can flag it rather than silently
@@ -58,7 +56,7 @@ export class InlineDownloadIO implements DownloadIO {
   }
 
   async setMtime(_path: string, _mtime: Date): Promise<void> {
-    /* no filesystem mtimes on the Worker */
+    /* no filesystem mtimes here */
   }
 
   extraContent(): DownloadContentBlock[] {
