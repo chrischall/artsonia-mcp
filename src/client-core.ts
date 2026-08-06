@@ -6,13 +6,10 @@ import { FetchArtsoniaTransport } from './transport-fetch.js';
 import type { ArtsoniaResponse, ArtsoniaTransport } from './transport.js';
 
 // Load `.env` next to the compiled entry point. `loadDotenvSafely` is a no-throw
-// loader; the try/catch additionally guards the Cloudflare Worker runtime, where
-// `import.meta.url` is undefined and `fileURLToPath(undefined)` would otherwise
-// throw at module init (Worker startup validation, code 10021) — there is no
-// filesystem / `.env` to load there anyway. Both stdio (via client.ts) and the
-// Worker (via worker.ts → client-core.ts) reach this module, so the guard is
-// what keeps the Worker from crashing on load. Real env vars still win
-// (`override: false`).
+// loader; the try/catch additionally guards a runtime where `import.meta.url`
+// is undefined and `fileURLToPath(undefined)` would otherwise throw at module
+// init — there is no filesystem / `.env` to load in one of those anyway. Real
+// env vars still win (`override: false`).
 try {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   await loadDotenvSafely({ path: join(__dirname, '..', '.env'), override: false });
@@ -105,10 +102,10 @@ export class ArtsoniaClient {
 
 /**
  * Build a per-user, DIRECT-mode `ArtsoniaClient` from injected credentials — the
- * injectable constructor seam the hosted Cloudflare connector uses. Each call
+ * injectable constructor seam a hosted per-user deployment uses. Each call
  * mints its own `FetchArtsoniaTransport` + `AuthManager(username/password)`, so
- * concurrent connector sessions never share a cookie jar. Direct mode only:
- * there is no browser tab on the Worker, so the fetchproxy transport (and
+ * concurrent sessions never share a cookie jar. Direct mode only: a hosted
+ * deployment has no browser tab, so the fetchproxy transport (and
  * `make-transport.ts`, which carries it) is intentionally never referenced here.
  */
 export function createDirectClient(opts: { username?: string; password?: string }): ArtsoniaClient {

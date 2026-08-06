@@ -15,7 +15,7 @@ Two transport modes, selected by `ARTSONIA_TRANSPORT`:
 
 `src/auth.ts` owns the username/password login and the cookie session. It delegates the single-flight login + invalidate/re-login + one-replay-on-expiry to the shared `CookieSessionManager` from `@chrischall/mcp-utils/session`, typed over `ArtsoniaResponse` so the custom transport's response flows through `withSession()` untouched.
 
-- **Env vars:** `ARTSONIA_USERNAME` + `ARTSONIA_PASSWORD` (required in direct mode), `ARTSONIA_TRANSPORT` (`fetch` default | `fetchproxy`), `ARTSONIA_WS_PORT` (fetchproxy WebSocket port override; default `37149` — a shared fleet port, do NOT change).
+- **Env vars:** `ARTSONIA_USERNAME` + `ARTSONIA_PASSWORD` (required in direct mode), `ARTSONIA_TRANSPORT` (`fetch` default | `fetchproxy`), `ARTSONIA_WS_PORT` (fetchproxy WebSocket port override; default `37149` — a shared fleet port, do NOT change), `ARTSONIA_INLINE_DOWNLOADS` (`1`/`true`/`yes`/`on` ⇒ inline image downloads; unset/false ⇒ disk — see "Download I/O" below).
 - **Deferred config error:** the `client` is a module singleton constructed in `src/client.ts` (NOT `index.ts`), so the server boots and answers the host's install-time `tools/list` probe even with no creds. The missing-creds error is cached as a *permanent* error (`CONFIG_ERROR_MARKER`) and only surfaces on the first tool call — every later `ensure()` rethrows it rather than retrying a login that can never succeed.
 - **Login success marker:** `doLogin()` POSTs `Username`/`Password`/`TargetUrl=/members/`/`Action=login` with `redirect: 'manual'` and treats a 301/302 whose `Location` is NOT `login.asp` (plus a non-empty cookie jar) as success. Magic-link-only accounts are unsupported.
 - **Expiry heuristic (`looksUnauthenticated`):** Artsonia expires by redirecting/rendering back to the login page (NOT a 401). Detected from the final URL, login-page body markers (`You need to log in` / `Parent (or Fan) Login`), or a manual 3xx `Location` pointing at `login.asp`.
@@ -44,12 +44,27 @@ src/
     fans.ts               # artsonia_get_fans
     feedback.ts           # artsonia_get_feedback, artsonia_mark_feedback_read
     account.ts            # artsonia_get_awards, artsonia_get_profile
-    download.ts           # artsonia_download_artwork + buildFilename()/buildRelPath() + FETCH_CONCURRENCY
+    download.ts           # artsonia_download_artwork + buildFilename()/buildRelPath() + FETCH_CONCURRENCY + the DownloadIO/DownloadContentBlock interface (imports NO node:fs)
+    download-io.ts        # NodeDownloadIO: disk-backed IO (persistsFiles=true). The ONLY module in the download path that touches node:fs
+    download-io-inline.ts # InlineDownloadIO: filesystem-free IO (persistsFiles=false) — accumulates image bytes and returns them as base64 MCP image blocks, capped at MAX_INLINE_BYTES (24 MiB); extraContent() DRAINS on read
+    make-download-io.ts   # makeDownloadIO(): env-driven IO selector (ARTSONIA_INLINE_DOWNLOADS) — the sibling of make-transport.ts
     embed.ts              # embedJpegMetadata(): EXIF (piexif-ts) + hand-rolled IPTC APP13; lazily imported by download.ts
     writes.ts             # artsonia_post_comment, artsonia_invite_fan, artsonia_set_notifications + parseProfileForm()
 ```
 
 `src/index.ts` builds an array of `(server) => register<Domain>Tools(server, client)` closures and hands them to `runMcp` from `@chrischall/mcp-utils`. Each `tools/*.ts` exports a `register<Domain>Tools(server, client)` that calls `server.registerTool(...)`.
+
+### Download I/O (disk vs inline)
+
+`artsonia_download_artwork` is the one tool that produces bytes rather than JSON, so **where those bytes go depends on who owns the filesystem**. `download.ts` never imports `node:fs`; it takes a `DownloadIO` and `makeDownloadIO()` picks one from the env (the same shape as `makeTransport()`):
+
+- **Disk (default, `NodeDownloadIO`)** — a local stdio install: the server's filesystem *is* the user's, so writing `dest` is exactly right. `persistsFiles:true`; `extraContent()` returns `[]`, so the tool result is pure JSON.
+- **Inline (`ARTSONIA_INLINE_DOWNLOADS=1`, `InlineDownloadIO`)** — a hosted deployment (e.g. mcp-host), where the "filesystem" is the runner's disk and the user can never reach it. Image bytes come back as base64 MCP image blocks appended to the JSON summary; `persistsFiles:false`, so the tool **omits** `index_file`/`metadata_count` rather than advertise sidecars/manifests nobody can fetch (honesty contract), `exists()` is always false (`skip_existing` never skips), and `mkdirp`/`setMtime` are no-ops.
+
+Two traps live here:
+
+- **`extraContent()` drains on read.** One IO instance is constructed in `index.ts` and reused for every tool call, so leaving the buffer populated would replay call 1's images inside call 2's result. Any new call site must read it exactly once per invocation.
+- **`MAX_INLINE_BYTES` (24 MiB raw, ~32 MiB base64) is a real ceiling.** An unbounded pull (no `limit`, `resolution: full`) would otherwise blow a host's response-size limit. Over-cap images are dropped and reported in a text block — never silently truncated.
 
 ## Tool surface
 
@@ -77,6 +92,7 @@ Notable args:
 - `get_portfolio` `include_details:true` fetches each artwork's detail page concurrently (slower) and merges the scalar fields (drops the heavy per-artwork `comments`); off by default returns lean tiles in one request.
 - `download_artwork` `write_index:true` writes an `index.json` manifest (artwork_id, title, file, grade, project, date) of what's on disk (downloaded + skipped); returned as `index_file`. Image CDN is public — no auth needed.
 - `download_artwork` `write_metadata:true` writes a per-artwork `<image-name>.json` sidecar next to each image (downloaded + skipped) carrying the artwork's comments (same source as `list_comments`) and the student's teacher feedback for it (same source as `get_feedback`); count returned as `metadata_count`. `path_template` (e.g. `"{grade}/{project}"` or `"{school_year}"`) lays downloads out into subfolders composed with `filename_template` — same tokens + slugification, empty segments collapse, deterministic paths keep `skip_existing` idempotent; `{school_year}` (July–June) derives from the image's `Last-Modified`. `embed_metadata:true` embeds title/project/grade + the source date into each JPEG's EXIF/IPTC via a lazily-imported `embed.ts` (piexif-ts + hand-rolled IPTC APP13) — best-effort (a failed embed writes the original bytes), applies to freshly downloaded files only, count returned as `embedded_count`. `include_private:false` excludes private pieces (`private_excluded_count`). The result reports `total_bytes` + `private_count` and per-file `is_private`; the dry run adds `estimated_bytes`/`estimated_total_bytes` via HEAD probes of the public CDN (read-only). Unfiltered confirmed runs also re-read `/members/` and report a `count_check` (+ `warning`) when `downloaded+skipped` ≠ the student's `artwork_count`, so partial pulls don't pass silently.
+- `download_artwork` under `ARTSONIA_INLINE_DOWNLOADS=1` returns the images themselves as base64 blocks and drops the on-disk extras — see "Download I/O (disk vs inline)" above for what changes.
 
 ## Conventions
 
@@ -141,3 +157,5 @@ write-verification, transport archetypes, testing traps) live in
 - **Don't break the "no env vars set" smoke path.** The server must boot cleanly so MCP hosts can complete install-time `tools/list` — the missing-creds error is deferred to the first tool call.
 - **Don't eager-import `@fetchproxy/server` or `@chrischall/mcp-utils/fetchproxy`.** Keep them behind the lazy `import()` (and keep both in the bundle script's `--external` list) so the default `fetch` transport (and the externalized `.mcpb` bundle) never touch them.
 - **Don't change the shared fetchproxy port** (`37149`, `ARTSONIA_WS_PORT` default).
+- **Don't import `node:fs` into `download.ts`** (or make the disk IO the unconditional default). The `DownloadIO` seam is what lets a hosted deployment return artwork inline; `node:fs` belongs only in `download-io.ts`.
+- **Don't make `extraContent()` non-draining**, and don't call it twice per invocation. The IO instance is shared across tool calls — a non-draining read replays a previous call's images into a later result.

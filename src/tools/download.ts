@@ -7,8 +7,8 @@ import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImag
 
 /**
  * An extra MCP content block the download IO can append to the tool result: an
- * inline image (the Worker's base64 artwork bytes) or a text note (e.g. the
- * inline IO's "images omitted — over the response cap" warning).
+ * inline image (the inline IO's base64 artwork bytes) or a text note (e.g. its
+ * "images omitted — over the response cap" warning).
  */
 export type DownloadContentBlock =
   | { type: 'image'; data: string; mimeType: string }
@@ -16,17 +16,20 @@ export type DownloadContentBlock =
 
 /**
  * The filesystem operations `artsonia_download_artwork` needs, abstracted so a
- * Worker deployment can supply an inline (no-disk) implementation. `node:fs`
- * lives ONLY behind this boundary — `download.ts` imports none of it — so the
- * hosted Cloudflare connector can register the download tool with an inline IO
- * that returns image bytes as MCP content blocks instead of writing to disk.
- * The stdio server injects the disk-backed `NodeDownloadIO` (`./download-io.ts`).
+ * hosted deployment can supply an inline (no-disk) implementation. `node:fs`
+ * lives ONLY behind this boundary — `download.ts` imports none of it — so a
+ * server whose disk the user can't reach can register the download tool with an
+ * IO that returns image bytes as MCP content blocks instead of writing them
+ * somewhere unreachable. `./make-download-io.ts` picks the implementation:
+ * the disk-backed `NodeDownloadIO` (`./download-io.ts`) by default, or the
+ * `InlineDownloadIO` (`./download-io-inline.ts`) under
+ * `ARTSONIA_INLINE_DOWNLOADS`.
  */
 export interface DownloadIO {
   /**
    * Whether `writeFile` persists to a location the caller can later retrieve.
-   * The disk IO is `true`; the Worker's inline IO is `false` (image bytes are
-   * returned inline, but `.json` sidecars/`index.json` have nowhere to go). When
+   * The disk IO is `true`; the inline IO is `false` (image bytes are returned
+   * inline, but `.json` sidecars/`index.json` have nowhere to go). When
    * `false`, the tool omits the `index_file`/`metadata_count` fields rather than
    * advertise files it never wrote (honesty contract — see CLAUDE.md).
    */
@@ -41,7 +44,7 @@ export interface DownloadIO {
   setMtime(path: string, mtime: Date): Promise<void>;
   /**
    * MCP content blocks to append to the tool result. The disk IO returns `[]`;
-   * the Worker's inline IO returns each written image as a base64 image block.
+   * the inline IO returns each written image as a base64 image block.
    */
   extraContent(): DownloadContentBlock[];
 }
@@ -183,7 +186,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
       // write_metadata only earns a detail fetch where its sidecars can actually
-      // be written (io.persistsFiles); on the inline Worker IO they're dropped,
+      // be written (io.persistsFiles); on the inline IO they're dropped,
       // so skip the fetch. embed_metadata still needs detail (it embeds into the
       // returned image bytes, which works on either IO).
       const needDetail =
@@ -339,7 +342,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // skipped on a re-run), so the response always carries index_file rather
       // than silently omitting it. Lists BOTH freshly-downloaded and
       // already-present (skipped) items — it's an inventory of what's in `dest`,
-      // not just this run's downloads. Skipped entirely on the inline Worker IO
+      // not just this run's downloads. Skipped entirely on the inline IO
       // (no filesystem): index_file is then omitted, not advertised unwritten.
       let indexFile: string | undefined;
       if (write_index && io.persistsFiles) {
@@ -376,7 +379,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // image (downloaded AND already-present), carrying the artwork's comments
       // (from its detail page — same source as artsonia_list_comments) and the
       // student's teacher feedback for it (same source as artsonia_get_feedback).
-      // Skipped on the inline Worker IO (no filesystem): metadata_count is then
+      // Skipped on the inline IO (no reachable filesystem): metadata_count is then
       // omitted rather than reported for sidecars that were never written.
       let metadataCount: number | undefined;
       if (write_metadata && io.persistsFiles) {
@@ -443,10 +446,10 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
         ...(metadataCount !== undefined ? { metadata_count: metadataCount } : {}),
         ...(embed_metadata ? { embedded_count: downloaded.filter((d) => d.embedded).length } : {}),
       });
-      // On the hosted connector there is no filesystem: the inline IO returns the
-      // downloaded image bytes as MCP content blocks, appended alongside the JSON
-      // summary. The disk-backed NodeDownloadIO returns [] here (files are on
-      // disk), so the stdio result is byte-for-byte unchanged.
+      // A filesystem-free DownloadIO returns the downloaded image bytes as MCP
+      // content blocks, appended alongside the JSON summary. The disk-backed
+      // NodeDownloadIO returns [] here (the files are on disk), so its result is
+      // unchanged.
       const extra = io.extraContent();
       if (extra.length) result.content.push(...extra);
       return result;
