@@ -2,10 +2,11 @@ import { mkdir, writeFile, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import type { DownloadContentBlock, DownloadIO } from './download.js';
 
-// Disk-backed download I/O for the stdio/desktop server. This is the ONLY module
-// in the download path that touches `node:fs`; `download.ts` imports it as a type
-// only, so the hosted Cloudflare Worker (which injects the inline IO instead)
-// never pulls `node:fs` in through the download tool.
+// Disk-backed download I/O for a local stdio/desktop install, where the server's
+// filesystem IS the user's — this is the default (see `./make-download-io.ts`).
+// It is the ONLY module in the download path that touches `node:fs`;
+// `download.ts` imports it as a type only, so a hosted deployment running the
+// inline IO never exercises `node:fs` through the download tool.
 export class NodeDownloadIO implements DownloadIO {
   readonly persistsFiles = true;
 

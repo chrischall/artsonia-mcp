@@ -36,8 +36,6 @@ export const ARTSONIA_ORIGIN = 'https://www.artsonia.com';
 
 // NOTE: `makeTransport()` (the env-driven direct-vs-fetchproxy selector) lives in
 // `./make-transport.ts`, NOT here. This module is a LEAF — pure types + the
-// origin constant, with no import of `@fetchproxy/server`. The hosted Cloudflare
-// Worker's module graph reaches this file (via transport-fetch → client-core),
-// so keeping the fetchproxy dynamic import out of it is what stops the bridge
-// from being pulled into the Worker bundle. Only the stdio singleton (client.ts)
-// imports make-transport.ts, and the Worker never imports client.ts.
+// origin constant, with no import of `@fetchproxy/server`. Only the stdio
+// singleton (client.ts) imports make-transport.ts, so a consumer that builds its
+// clients through `createDirectClient` never pulls the browser bridge in.
