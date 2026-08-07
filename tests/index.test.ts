@@ -23,7 +23,7 @@ describe('full tool surface', () => {
       registerFanTools(s, client);
       registerFeedbackTools(s, client);
       registerAccountTools(s, client);
-      registerDownloadTools(s, client, new NodeDownloadIO());
+      registerDownloadTools(s, client, () => new NodeDownloadIO());
       registerWriteTools(s, client);
     });
     const names = (await harness.listTools()).map((t) => t.name).sort();

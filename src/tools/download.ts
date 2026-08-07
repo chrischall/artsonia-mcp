@@ -148,7 +148,17 @@ type Outcome =
   | { kind: 'skipped'; artwork_id: string; file: string }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
-export function registerDownloadTools(server: McpServer, client: ArtsoniaClient, io: DownloadIO): void {
+/**
+ * `makeIO` is called ONCE PER INVOCATION, not once per registration. A
+ * filesystem-free IO accumulates image bytes and drains them on read, so a
+ * shared instance would let two concurrent `artsonia_download_artwork` calls
+ * interleave and one drain the other's images.
+ */
+export function registerDownloadTools(
+  server: McpServer,
+  client: ArtsoniaClient,
+  makeIO: () => DownloadIO,
+): void {
   server.registerTool(
     'artsonia_download_artwork',
     {
@@ -183,6 +193,7 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
       // write_metadata needs each artwork's detail page anyway (for its comments)
       // and embed_metadata needs title/project/grade for the EXIF/IPTC fields, so
       // both ride the same up-front detail fetch as descriptive names — but only
+      const io = makeIO();
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
       // write_metadata only earns a detail fetch where its sidecars can actually
@@ -435,12 +446,26 @@ export function registerDownloadTools(server: McpServer, client: ArtsoniaClient,
         private_count: privateCount,
         ...(privateExcluded > 0 ? { private_excluded_count: privateExcluded } : {}),
         total_bytes: downloaded.reduce((sum, d) => sum + d.bytes, 0),
-        dest: destDir,
+        ...(io.persistsFiles ? { dest: destDir } : {}),
         resolution,
         ...(warning ? { warning } : {}),
         ...(countCheck ? { count_check: countCheck } : {}),
-        downloaded: downloaded.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })),
-        ...(skipped.length ? { skipped: skipped.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
+        downloaded: downloaded.map(({ kind, file, ...rest }) => ({
+          ...rest,
+          // A file path only means something to the caller if a file was
+          // actually written somewhere they can reach.
+          ...(io.persistsFiles ? { file } : {}),
+          is_private: isPrivate(rest.artwork_id),
+        })),
+        ...(skipped.length
+          ? {
+              skipped: skipped.map(({ kind, file, ...rest }) => ({
+                ...rest,
+                ...(io.persistsFiles ? { file } : {}),
+                is_private: isPrivate(rest.artwork_id),
+              })),
+            }
+          : {}),
         ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
         ...(indexFile ? { index_file: indexFile } : {}),
         ...(metadataCount !== undefined ? { metadata_count: metadataCount } : {}),
