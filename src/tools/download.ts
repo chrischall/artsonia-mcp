@@ -193,9 +193,13 @@ export function registerDownloadTools(
       // write_metadata needs each artwork's detail page anyway (for its comments)
       // and embed_metadata needs title/project/grade for the EXIF/IPTC fields, so
       // both ride the same up-front detail fetch as descriptive names — but only
-      const io = makeIO();
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
+      //
+      // One IO PER INVOCATION, not one shared across calls: `extraContent()`
+      // drains on read, so a shared instance would replay this call's images
+      // into the next one's result.
+      const io = makeIO();
       // write_metadata only earns a detail fetch where its sidecars can actually
       // be written (io.persistsFiles); on the inline IO they're dropped,
       // so skip the fetch. embed_metadata still needs detail (it embeds into the

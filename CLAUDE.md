@@ -63,7 +63,7 @@ src/
 
 Two traps live here:
 
-- **`extraContent()` drains on read.** One IO instance is constructed in `index.ts` and reused for every tool call, so leaving the buffer populated would replay call 1's images inside call 2's result. Any new call site must read it exactly once per invocation.
+- **`extraContent()` drains on read, and the IO is built PER INVOCATION.** `makeIO()` is called inside the handler rather than once in `index.ts`, because a shared instance replays call 1's images inside call 2's result. Both halves matter: a per-call instance with a non-draining read leaks within one call, and a shared instance leaks across them.
 - **`MAX_INLINE_BYTES` (24 MiB raw, ~32 MiB base64) is a real ceiling.** An unbounded pull (no `limit`, `resolution: full`) would otherwise blow a host's response-size limit. Over-cap images are dropped and reported in a text block — never silently truncated.
 
 ## Tool surface
@@ -158,4 +158,4 @@ write-verification, transport archetypes, testing traps) live in
 - **Don't eager-import `@fetchproxy/server` or `@chrischall/mcp-utils/fetchproxy`.** Keep them behind the lazy `import()` (and keep both in the bundle script's `--external` list) so the default `fetch` transport (and the externalized `.mcpb` bundle) never touch them.
 - **Don't change the shared fetchproxy port** (`37149`, `ARTSONIA_WS_PORT` default).
 - **Don't import `node:fs` into `download.ts`** (or make the disk IO the unconditional default). The `DownloadIO` seam is what lets a hosted deployment return artwork inline; `node:fs` belongs only in `download-io.ts`.
-- **Don't make `extraContent()` non-draining**, and don't call it twice per invocation. The IO instance is shared across tool calls — a non-draining read replays a previous call's images into a later result.
+- **Don't make `extraContent()` non-draining**, don't call it twice per invocation, and don't hoist `makeIO()` out of the handler. Each of those on its own reintroduces one call's images appearing in another's result.
