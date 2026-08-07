@@ -14,7 +14,7 @@ try {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   await loadDotenvSafely({ path: join(__dirname, '..', '.env'), override: false });
 } catch {
-  /* v8 ignore next -- only reached in a non-Node runtime (Workers): no .env to load */
+  /* v8 ignore next -- only reached in a non-Node runtime: no .env to load */
 }
 
 export interface ArtsoniaClientOptions {
@@ -26,8 +26,9 @@ export interface ArtsoniaClientOptions {
 // fetchHtml(); writes through write(). Both ensure a live session and retry
 // once across a re-login if the response looks unauthenticated.
 //
-// This module is WORKER-SAFE: it imports only the direct FetchArtsoniaTransport
-// (no `@fetchproxy/server`) and the leaf transport types. The env-driven
+// This module is BRIDGE-FREE: it imports only the direct FetchArtsoniaTransport
+// (no `@fetchproxy/server`) and the leaf transport types, so a consumer that
+// wants no browser bridge can depend on it alone. The env-driven
 // stdio singleton (which pulls in the fetchproxy fallback via make-transport.ts)
 // lives in client.ts, which re-exports this class.
 export class ArtsoniaClient {

@@ -96,7 +96,7 @@ describe('artsonia_download_artwork on the inline IO', () => {
 
   it('does not leak a prior invocation\'s images into a later result (drain-on-read)', async () => {
     const io = new InlineDownloadIO();
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, io));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
     const first = await harness.callTool('artsonia_download_artwork', {
       artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
     });
@@ -112,7 +112,7 @@ describe('artsonia_download_artwork on the inline IO', () => {
 
   it('omits index_file / metadata_count on the inline path (those files are never persisted)', async () => {
     const io = new InlineDownloadIO();
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, io));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
     const res = await harness.callTool('artsonia_download_artwork', {
       artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}',
       write_index: true, write_metadata: true, confirm: true,
@@ -121,6 +121,45 @@ describe('artsonia_download_artwork on the inline IO', () => {
     expect(out.downloaded_count).toBe(2);
     expect(out.index_file).toBeUndefined();
     expect(out.metadata_count).toBeUndefined();
+    await harness.close();
+  });
+  it('gives each invocation its own IO, so concurrent calls cannot drain each other', async () => {
+    // The regression: a single shared instance meant two in-flight calls
+    // interleaved and one result drained the other's images.
+    const built: InlineDownloadIO[] = [];
+    harness = await createTestHarness((s) =>
+      registerDownloadTools(s, client, () => {
+        const io = new InlineDownloadIO();
+        built.push(io);
+        return io;
+      }),
+    );
+    const [a, b] = await Promise.all([
+      harness.callTool('artsonia_download_artwork', {
+        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
+      }),
+      harness.callTool('artsonia_download_artwork', {
+        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1, confirm: true,
+      }),
+    ]);
+    expect(built).toHaveLength(2);
+    expect(built[0]).not.toBe(built[1]);
+    // Each result carries exactly its own images, whichever order they finished in.
+    expect([imageBlocks(a).length, imageBlocks(b).length].sort()).toEqual([1, 2]);
+    await harness.close();
+  });
+
+  it('omits dest and per-item file paths when nothing was written to disk', async () => {
+    // Reporting a path the caller cannot reach reads as "your files are there".
+    const io = new InlineDownloadIO();
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
+    const res = await harness.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
+    });
+    const out = summary(res);
+    expect(out.dest).toBeUndefined();
+    expect(out.downloaded).toHaveLength(2);
+    for (const d of out.downloaded) expect(d.file).toBeUndefined();
     await harness.close();
   });
 });

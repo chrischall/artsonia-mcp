@@ -17,10 +17,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // deferred-config-error pattern holds: the server boots and answers the host's
 // install-time tools/list probe even without ARTSONIA_USERNAME/PASSWORD — the
 // config error only surfaces on the first tool call.
-// One IO instance, reused across every artsonia_download_artwork call — the
-// inline IO drains its image buffer on read so calls never leak into each other.
-const downloadIO = makeDownloadIO();
-
 const tools: Array<(server: McpServer) => void> = [
   (s) => registerHealthcheckTools(s, client),
   (s) => registerStudentTools(s, client),
@@ -28,7 +24,7 @@ const tools: Array<(server: McpServer) => void> = [
   (s) => registerFanTools(s, client),
   (s) => registerFeedbackTools(s, client),
   (s) => registerAccountTools(s, client),
-  (s) => registerDownloadTools(s, client, downloadIO),
+  (s) => registerDownloadTools(s, client, makeDownloadIO),
   (s) => registerWriteTools(s, client),
 ];
 

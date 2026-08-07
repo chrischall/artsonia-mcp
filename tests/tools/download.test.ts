@@ -133,7 +133,7 @@ describe('buildRelPath', () => {
 
 describe('artsonia_download_artwork', () => {
   it('setup + registers the tool', async () => {
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, new NodeDownloadIO()));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
     expect((await harness.listTools()).map((t) => t.name)).toContain('artsonia_download_artwork');
   });
 
