@@ -190,20 +190,16 @@ export function registerDownloadTools(
       // {date}/{school_year} anywhere in the name or path → the target path is
       // only known once the image's Last-Modified has been read.
       const deferredNaming = /\{(date|school_year)\}/.test(templates);
-      // One IO per invocation: a filesystem-free IO buffers image bytes and
-      // drains them on read, so a shared instance lets concurrent calls drain
-      // each other.
+      // One IO PER INVOCATION, not one shared across calls: a filesystem-free
+      // IO buffers image bytes and `extraContent()` drains them on read, so a
+      // shared instance would replay this call's images into the next one's
+      // result (and let concurrent calls drain each other).
       const io = makeIO();
       // write_metadata needs each artwork's detail page anyway (for its comments)
       // and embed_metadata needs title/project/grade for the EXIF/IPTC fields, so
       // both ride the same up-front detail fetch as descriptive names — but only
       // on confirmed runs: previews don't use that data, so dry-run keeps the
       // {artwork_id} fast path (review on #30).
-      //
-      // One IO PER INVOCATION, not one shared across calls: `extraContent()`
-      // drains on read, so a shared instance would replay this call's images
-      // into the next one's result.
-      const io = makeIO();
       // write_metadata only earns a detail fetch where its sidecars can actually
       // be written (io.persistsFiles); on the inline IO they're dropped,
       // so skip the fetch. embed_metadata still needs detail (it embeds into the
