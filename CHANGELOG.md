@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0](https://github.com/chrischall/artsonia-mcp/compare/v0.8.4...v0.9.0) (2026-08-09)
+
+
+### Features
+
+* **download:** return artwork inline when the server's disk is not the user's ([#95](https://github.com/chrischall/artsonia-mcp/issues/95)) ([2184fa9](https://github.com/chrischall/artsonia-mcp/commit/2184fa9624f6660deb68225b46996d66c452e98c))
+
+
+### Bug Fixes
+
+* **download:** give each invocation its own IO, and stop naming files never written ([#99](https://github.com/chrischall/artsonia-mcp/issues/99)) ([f9f8685](https://github.com/chrischall/artsonia-mcp/commit/f9f86852a81edd1072c10b6d1e67b3109d8290cc)), closes [#96](https://github.com/chrischall/artsonia-mcp/issues/96)
+
+
+### Documentation
+
+* correct the guidance the last change outdated ([#101](https://github.com/chrischall/artsonia-mcp/issues/101)) ([b29ff9d](https://github.com/chrischall/artsonia-mcp/commit/b29ff9d696d9094e966c9a246617c8cda4eaf78e))
+* move a statement out of the comment it landed inside, and update what it describes ([#102](https://github.com/chrischall/artsonia-mcp/issues/102)) ([b2b30cf](https://github.com/chrischall/artsonia-mcp/commit/b2b30cf9f33fbe7e3043e9deadbb169e39ae8428)), closes [#100](https://github.com/chrischall/artsonia-mcp/issues/100)
+
 ## [0.8.4](https://github.com/chrischall/artsonia-mcp/compare/v0.8.3...v0.8.4) (2026-08-06)
 
 
