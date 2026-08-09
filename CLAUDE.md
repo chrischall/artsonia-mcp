@@ -63,7 +63,7 @@ src/
 
 Two traps live here:
 
-- **One IO per invocation, and `extraContent()` drains on read.** `registerDownloadTools` takes a *factory* and calls it per tool call — a shared instance let two concurrent calls drain each other's buffers. Drain-on-read is the second half of that guarantee: any call site must read it exactly once.
+- **One IO per invocation, and `extraContent()` drains on read.** `registerDownloadTools` takes a *factory* (`makeIO: () => DownloadIO`) and calls it inside each handler rather than once in `index.ts`, because a shared instance replays call 1's images inside call 2's result. Both halves matter: a per-call instance with a non-draining read leaks within one call, and a shared instance leaks across them.
 - **`MAX_INLINE_BYTES` (24 MiB raw, ~32 MiB base64) is a real ceiling.** An unbounded pull (no `limit`, `resolution: full`) would otherwise blow a host's response-size limit. Over-cap images are dropped and reported in a text block — never silently truncated.
 
 ## Tool surface
@@ -158,4 +158,4 @@ write-verification, transport archetypes, testing traps) live in
 - **Don't eager-import `@fetchproxy/server` or `@chrischall/mcp-utils/fetchproxy`.** Keep them behind the lazy `import()` (and keep both in the bundle script's `--external` list) so the default `fetch` transport (and the externalized `.mcpb` bundle) never touch them.
 - **Don't change the shared fetchproxy port** (`37149`, `ARTSONIA_WS_PORT` default).
 - **Don't import `node:fs` into `download.ts`** (or make the disk IO the unconditional default). The `DownloadIO` seam is what lets a hosted deployment return artwork inline; `node:fs` belongs only in `download-io.ts`.
-- **Don't make `extraContent()` non-draining**, don't call it twice per invocation, and don't hoist the IO back out to a shared instance. Either change lets one call's images surface in another's result.
+- **Don't make `extraContent()` non-draining**, don't call it twice per invocation, and don't hoist `makeIO()` out of the handler back to a shared instance. Each of those on its own reintroduces one call's images appearing in another's result.
