@@ -50,5 +50,8 @@ egress:
   allow:
     # Only hosts the SERVER process actually fetches. Hosts that appear
     # solely in a URL this server BUILDS and returns are excluded.
+    # Artwork downloads fetch this CDN directly (tools/download.ts HEADs and
+    # GETs the URL built by artworkImageUrl()).
+    - images.artsonia.com
     - artsonia.com
     - www.artsonia.com
