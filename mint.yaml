@@ -39,13 +39,27 @@ env:
       fleet-shared 37149). The runner injects a per-registration port for a
       hosted bridged child, so this is the name to give bridgePortEnv at
       registration.
+  - name: ARTSONIA_SESSION_CACHE
+    required: false
+    help: >-
+      Set to false to disable the on-disk session cache and log in on every
+      process start. Defaults to enabled (direct transport only).
+  - name: ARTSONIA_SESSION_FILE
+    required: false
+    help: >-
+      Absolute path for the session cache file. Defaults to
+      $MCP_DATA_DIR/.artsonia-mcp/session.json.
 state:
   dataDir: true
   reason: >-
-    The fetchproxy identity lives at $HOME/.fetchproxy/identity/<name>.json
-    and the pair code derives from it. Without a persistent $HOME every cold
-    start mints a fresh identity and re-prompts pairing in the browser; the
-    API refuses bridge without it.
+    Two things live here. The fetchproxy identity is at
+    $HOME/.fetchproxy/identity/<name>.json and the pair code derives from it —
+    without a persistent $HOME every cold start mints a fresh identity and
+    re-prompts pairing in the browser, and the API refuses bridge without it.
+    On the direct transport the signed-in session is also cached at
+    $MCP_DATA_DIR/.artsonia-mcp/session.json (0600), so a restart reuses the
+    cookie jar instead of re-running the form login; a hosted child idles out
+    after ten minutes, so that is most starts.
 egress:
   allow:
     # Only hosts the SERVER process actually fetches. Hosts that appear
