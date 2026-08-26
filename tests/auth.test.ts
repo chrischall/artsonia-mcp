@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AuthManager } from '../src/auth.js';
 import type { ArtsoniaRequest, ArtsoniaResponse, ArtsoniaTransport } from '../src/transport.js';
 
@@ -100,5 +103,97 @@ describe('AuthManager', () => {
     await auth.forceRelogin(); // not cached → retries and succeeds
     expect(auth.cookieHeader()).toBe('SID=good');
     expect(t.calls.length).toBe(2);
+  });
+});
+
+describe('AuthManager — session cache', () => {
+  const okLoginTwice = (): ArtsoniaResponse => okLogin();
+
+  it('a second manager restores the jar and does not log in again', async () => {
+    // End to end through the adapter: the live session holds a CookieJar, the
+    // cache holds its rendered header, and this is what proves the mapping
+    // works in both directions rather than only in the unit test.
+    const dir = mkdtempSync(join(tmpdir(), 'artsonia-hit-'));
+    try {
+      vi.stubEnv('ARTSONIA_SESSION_CACHE', 'true');
+      vi.stubEnv('ARTSONIA_SESSION_FILE', join(dir, 'session.json'));
+
+      const first = fakeTransport(okLoginTwice);
+      const a = new AuthManager(first, { username: 'u@example.com', password: 'pw' });
+      await a.ensureLogin();
+      expect(first.calls.length).toBeGreaterThan(0);
+
+      const second = fakeTransport(okLoginTwice);
+      const b = new AuthManager(second, { username: 'u@example.com', password: 'pw' });
+      await b.ensureLogin();
+      expect(second.calls).toHaveLength(0); // restored, no login POST
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('binds to the credentials the manager was constructed with', async () => {
+    // AuthManager takes creds via opts as well as the environment. Binding to
+    // the env pair would mean a per-user client either never caches or reads a
+    // record keyed to somebody else.
+    const dir = mkdtempSync(join(tmpdir(), 'artsonia-bind-'));
+    try {
+      vi.stubEnv('ARTSONIA_SESSION_CACHE', 'true');
+      vi.stubEnv('ARTSONIA_SESSION_FILE', join(dir, 'session.json'));
+
+      const first = fakeTransport(okLoginTwice);
+      await new AuthManager(first, { username: 'a@example.com', password: 'pw' }).ensureLogin();
+
+      const other = fakeTransport(okLoginTwice);
+      await new AuthManager(other, { username: 'b@example.com', password: 'pw' }).ensureLogin();
+      expect(other.calls.length).toBeGreaterThan(0); // different user → own login
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('AuthManager — an expired session clears the cache', () => {
+  it('does not restore a session that withSession already invalidated', async () => {
+    // The clear half of the adapter. Without it an expired cookie would be read
+    // straight back off disk on the next start and the expiry would repeat —
+    // the cache turning a one-request cost into a permanent one.
+    const dir = mkdtempSync(join(tmpdir(), 'artsonia-clear-'));
+    try {
+      vi.stubEnv('ARTSONIA_SESSION_CACHE', 'true');
+      vi.stubEnv('ARTSONIA_SESSION_FILE', join(dir, 'session.json'));
+
+      // Seed a cached session with a successful login.
+      const seed = fakeTransport(okLogin);
+      await new AuthManager(seed, { username: 'u@example.com', password: 'pw' }).ensureLogin();
+
+      // Now drive an expiry whose RE-LOGIN also fails, so nothing re-saves and
+      // the cleared state is what survives. (A successful re-login would save a
+      // fresh record — correct, but it would hide whether the clear ran.)
+      let logins = 0;
+      const t = fakeTransport((req) => {
+        if (req.path?.includes('login')) {
+          logins += 1;
+          // The restored session is used first, so the only login here is the
+          // re-login after the expiry — fail it.
+          return { status: 200, body: 'bad credentials', url: 'https://www.artsonia.com/members/login.asp' };
+        }
+        return { status: 200, body: '', url: 'https://www.artsonia.com/members/login.asp' };
+      });
+      const auth = new AuthManager(t, { username: 'u@example.com', password: 'pw' });
+      await auth
+        .withSession(async () =>
+          t.request({ method: 'GET', path: '/members/home.asp' } as ArtsoniaRequest),
+        )
+        .catch(() => undefined);
+      expect(logins).toBeGreaterThan(0);
+
+      // The invalidate cleared the record, so a fresh manager must log in.
+      const next = fakeTransport(okLogin);
+      await new AuthManager(next, { username: 'u@example.com', password: 'pw' }).ensureLogin();
+      expect(next.calls.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

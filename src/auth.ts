@@ -1,6 +1,15 @@
 import { readEnvVar, McpToolError, CookieJar } from '@chrischall/mcp-utils';
 import { CookieSessionManager } from '@chrischall/mcp-utils/session';
 import type { ArtsoniaResponse, ArtsoniaTransport } from './transport.js';
+import {
+  createSessionCache,
+  jarFromHeader,
+  reportCacheWriteFailure,
+} from './session-cache.js';
+import type {
+  PersistedCookieSession,
+  SyncStatePersistence,
+} from '@chrischall/mcp-utils/session';
 
 const LOGIN_PATH = '/members/login.asp';
 const TARGET_URL = '/members/';
@@ -55,8 +64,35 @@ export class AuthManager {
     this.configError = username && password ? null : new Error(
       'ARTSONIA_USERNAME and ARTSONIA_PASSWORD environment variables are required',
     );
+    // The live session holds a CookieJar, which cannot be JSON round-tripped —
+    // so the cache stores the jar's rendered Cookie header and this view maps
+    // between the two. Keeping the mapping here leaves session-cache.ts free of
+    // the ArtsoniaSession type (and the import cycle that would come with it).
+    const cache = createSessionCache({ username, password });
+    const persistence: SyncStatePersistence<PersistedCookieSession<ArtsoniaSession>> | null =
+      cache === null
+        ? null
+        : {
+            load: () => {
+              const rec = cache.load();
+              if (rec === null) return null;
+              return {
+                session: { jar: jarFromHeader(rec.session.cookieHeader) },
+                sessionAt: rec.sessionAt,
+              };
+            },
+            save: (rec) =>
+              cache.save({
+                session: { cookieHeader: rec.session.jar.header() },
+                sessionAt: rec.sessionAt,
+              }),
+            clear: () => cache.clear(),
+          };
+
     this.session = new CookieSessionManager<ArtsoniaSession, ArtsoniaResponse>({
       login: () => this.doLogin(),
+      persistence: persistence ?? undefined,
+      onPersistError: reportCacheWriteFailure,
       // Direct-mode expiry detection: Artsonia redirects/renders back to the login
       // page. The manager invalidates, single-flight re-logs-in, and replays the
       // request EXACTLY once on this signal (see withSession).
