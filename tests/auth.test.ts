@@ -107,6 +107,10 @@ describe('AuthManager', () => {
 });
 
 describe('AuthManager — session cache', () => {
+  // These stub env vars; without an explicit unstub they leak into every later
+  // test in the file (the hermetic block at the top only covers its own describe).
+  afterEach(() => vi.unstubAllEnvs());
+
   const okLoginTwice = (): ArtsoniaResponse => okLogin();
 
   it('a second manager restores the jar and does not log in again', async () => {
@@ -154,6 +158,10 @@ describe('AuthManager — session cache', () => {
 });
 
 describe('AuthManager — an expired session clears the cache', () => {
+  // These stub env vars; without an explicit unstub they leak into every later
+  // test in the file (the hermetic block at the top only covers its own describe).
+  afterEach(() => vi.unstubAllEnvs());
+
   it('does not restore a session that withSession already invalidated', async () => {
     // The clear half of the adapter. Without it an expired cookie would be read
     // straight back off disk on the next start and the expiry would repeat —
@@ -176,9 +184,9 @@ describe('AuthManager — an expired session clears the cache', () => {
           logins += 1;
           // The restored session is used first, so the only login here is the
           // re-login after the expiry — fail it.
-          return { status: 200, body: 'bad credentials', url: 'https://www.artsonia.com/members/login.asp' };
+          return { status: 200, body: 'bad credentials', url: 'https://www.artsonia.com/members/login.asp', setCookie: [] };
         }
-        return { status: 200, body: '', url: 'https://www.artsonia.com/members/login.asp' };
+        return { status: 200, body: '', url: 'https://www.artsonia.com/members/login.asp', setCookie: [] };
       });
       const auth = new AuthManager(t, { username: 'u@example.com', password: 'pw' });
       await auth

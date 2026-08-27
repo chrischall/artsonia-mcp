@@ -1,0 +1,19 @@
+{
+  // Typechecks the TESTS as well as the source.
+  //
+  // The build config is `rootDir: "src"` / `include: ["src"]`, so `tests/` was
+  // never seen by tsc — and vitest transpiles with esbuild, which does no type
+  // checking at all. Between the two, a test could hand a fake object to a
+  // typed interface with a required field missing and nothing would say so.
+  // That is exactly what happened: fake ArtsoniaResponse literals omitted
+  // `setCookie`, and the suite was green.
+  //
+  // Separate from tsconfig.json rather than folded into it because widening
+  // `include` there would drag tests into `outDir` and break the emitted build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "tests"]
+}
