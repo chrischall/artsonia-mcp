@@ -20,13 +20,37 @@ export interface StoredArtsoniaSession {
   cookieHeader: string;
 }
 
-/** Where the signed-in session is cached between runs. */
-export function sessionCachePath(env: NodeJS.ProcessEnv = process.env): string {
+/**
+ * Reduce a username to something safe to put in a file name.
+ *
+ * Not a digest: the file lives 0600 inside a 0700 directory, and an unsalted
+ * digest of a credential-adjacent value is the kind of precomputable artifact
+ * the mcp-utils review rightly objected to. A sanitised login is readable by
+ * the operator who already knows it and no more revealing than the directory.
+ */
+function fileSegment(username: string): string {
+  const safe = username.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+  return safe === '' ? 'default' : safe.slice(0, 64);
+}
+
+/**
+ * Where the signed-in session is cached between runs.
+ *
+ * PER USER, which is load-bearing rather than tidy: `createDirectClient` builds
+ * a client per set of credentials, and one shared file meant each user's save
+ * clobbered the previous one — every record then failing its own binding check,
+ * so nobody ever got a cache hit and the file thrashed. An explicit
+ * ARTSONIA_SESSION_FILE still wins outright, for a deployment that wants one.
+ */
+export function sessionCachePath(
+  env: NodeJS.ProcessEnv = process.env,
+  username?: string | null,
+): string {
   return resolveStateFile({
     env,
     envVar: 'ARTSONIA_SESSION_FILE',
     subdir: '.artsonia-mcp',
-    fileName: 'session.json',
+    fileName: username ? `session-${fileSegment(username)}.json` : 'session.json',
   });
 }
 
@@ -100,7 +124,7 @@ export function createSessionCache(
   if (!username || !password) return null;
 
   return createFileStatePersistence<PersistedCookieSession<StoredArtsoniaSession>>({
-    filePath: sessionCachePath(env),
+    filePath: sessionCachePath(env, username),
     // Joined on a NUL, written as an escape rather than a literal byte: a
     // password may contain spaces, so a space-joined pair could collide with a
     // different pair by shifting the boundary between the two halves.

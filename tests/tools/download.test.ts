@@ -492,7 +492,7 @@ describe('artsonia_download_artwork', () => {
   // --- embed_metadata: EXIF/IPTC inside the JPEG (issue #13) ---
 
   it('embed_metadata default off: written bytes are byte-identical to the source image', async () => {
-    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(new Uint8Array(tinyJpeg()), {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));
@@ -502,7 +502,7 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('embed_metadata writes EXIF + IPTC that parse back from the downloaded JPEG', async () => {
-    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(new Uint8Array(tinyJpeg()), {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));
@@ -546,7 +546,7 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('embed_metadata on the id-only template fetches detail on the confirmed run (fields needed for EXIF)', async () => {
-    mockFetch.mockImplementation(() => Promise.resolve(new Response(tinyJpeg(), {
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(new Uint8Array(tinyJpeg()), {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));

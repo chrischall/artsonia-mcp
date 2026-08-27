@@ -96,3 +96,5 @@ Username/password auth using your Artsonia parent/fan account credentials. The s
 | `ARTSONIA_TRANSPORT` | No | Override transport: `stdio` (default), `sse`, or `fetchproxy` |
 | `ARTSONIA_WS_PORT` | No | WebSocket port when using `sse` transport |
 | `ARTSONIA_INLINE_DOWNLOADS` | No | Set to `1` on a hosted deployment to return `artsonia_download_artwork` images as inline base64 blocks instead of writing them to a disk the user can't reach. Leave unset for local installs. |
+| `ARTSONIA_SESSION_CACHE` | No | Set to `false` to disable the on-disk session cache and log in on every start. Defaults to enabled (direct transport only). |
+| `ARTSONIA_SESSION_FILE` | No | Override the session cache path. Defaults to `$MCP_DATA_DIR/.artsonia-mcp/session-<user>.json` — one file per user, so per-credential clients do not clobber each other. |

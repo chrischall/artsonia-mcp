@@ -30,7 +30,10 @@ const record = (cookieHeader = 'ASPSESSIONID=abc; member=42') => ({
   sessionAt: Date.now(),
 });
 
-const cacheFile = (d: string): string => join(d, '.artsonia-mcp', 'session.json');
+// One file PER USER now, so the helper has to mirror the sanitiser in
+// session-cache.ts rather than assume a single session.json.
+const cacheFile = (d: string, user = 'parent@example.com'): string =>
+  join(d, '.artsonia-mcp', `session-${user.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_')}.json`);
 
 describe('jarFromHeader', () => {
   it('round-trips a live jar through its rendered header', () => {
@@ -168,5 +171,43 @@ describe('reportCacheWriteFailure', () => {
       err.mockRestore();
       out.mockRestore();
     }
+  });
+});
+
+describe('two users in one process', () => {
+  it('each keeps its own record instead of clobbering the other', () => {
+    // The bug this fixes: createDirectClient builds a client per credential set,
+    // and one shared file meant each save overwrote the previous user's record —
+    // which then failed its own binding check, so NEITHER ever got a hit.
+    const a = { MCP_DATA_DIR: dir, ARTSONIA_SESSION_CACHE: 'true' };
+    const alice = createSessionCache({ env: a, username: 'alice@example.com', password: 'pw' })!;
+    const bob = createSessionCache({ env: a, username: 'bob@example.com', password: 'pw' })!;
+
+    alice.save(record('SID=alice'));
+    bob.save(record('SID=bob'));
+
+    // Both survive, and each reads back its own.
+    expect(alice.load()?.session.cookieHeader).toBe('SID=alice');
+    expect(bob.load()?.session.cookieHeader).toBe('SID=bob');
+  });
+
+  it('still discards a record when that user rotates their password', () => {
+    // Per-user paths must not cost the credential binding.
+    const a = { MCP_DATA_DIR: dir, ARTSONIA_SESSION_CACHE: 'true' };
+    createSessionCache({ env: a, username: 'alice@example.com', password: 'pw1' })!.save(record());
+    const rotated = createSessionCache({ env: a, username: 'alice@example.com', password: 'pw2' })!;
+    expect(rotated.load()).toBeNull();
+  });
+
+  it('an explicit ARTSONIA_SESSION_FILE still wins outright', () => {
+    // A deployment that wants one file keeps it.
+    const exact = join(dir, 'exact.json');
+    const p = createSessionCache({
+      env: { MCP_DATA_DIR: dir, ARTSONIA_SESSION_FILE: exact, ARTSONIA_SESSION_CACHE: 'true' },
+      username: 'alice@example.com',
+      password: 'pw',
+    })!;
+    p.save(record());
+    expect(existsSync(exact)).toBe(true);
   });
 });
