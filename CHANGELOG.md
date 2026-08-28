@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/chrischall/artsonia-mcp/compare/v0.10.0...v0.10.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **egress:** declare only the hosts the server process dials in mint.yaml ([#121](https://github.com/chrischall/artsonia-mcp/issues/121)) ([ae3cf29](https://github.com/chrischall/artsonia-mcp/commit/ae3cf2932c3ea0179639fb6258fb9d04257e9e5d))
+
 ## [0.10.0](https://github.com/chrischall/artsonia-mcp/compare/v0.9.0...v0.10.0) (2026-08-28)
 
 
