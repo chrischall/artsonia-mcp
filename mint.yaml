@@ -64,8 +64,18 @@ egress:
   allow:
     # Only hosts the SERVER process actually fetches. Hosts that appear
     # solely in a URL this server BUILDS and returns are excluded.
-    # Artwork downloads fetch this CDN directly (tools/download.ts HEADs and
-    # GETs the URL built by artworkImageUrl()).
+    # Matching is exact: an apex entry does not cover subdomains and the
+    # proxy follows no redirects, so every hop is its own dial.
+    # Artwork downloads fetch this CDN directly in BOTH transports
+    # (tools/download.ts HEADs and GETs the URL built by artworkImageUrl(),
+    # bypassing the site transport).
     - images.artsonia.com
-    - artsonia.com
+    # The DEFAULT transport (ARTSONIA_TRANSPORT unset / `fetch`) dials the
+    # site itself: every ArtsoniaRequest path resolves against
+    # https://www.artsonia.com (transport.ts ARTSONIA_ORIGIN), and the
+    # login.asp 302 lands on a same-host path (/members/), not another host.
+    # Under ARTSONIA_TRANSPORT=fetchproxy the signed-in browser tab dials the
+    # site instead and the process opens only the loopback concentrator port,
+    # so this entry is unused there but harmless. The bare apex
+    # `artsonia.com` is never dialled (it 307s TO www, never the reverse).
     - www.artsonia.com
