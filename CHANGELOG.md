@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.0](https://github.com/chrischall/artsonia-mcp/compare/v0.9.0...v0.10.0) (2026-08-28)
+
+
+### Features
+
+* cache the signed-in session so a restart skips the form login ([#113](https://github.com/chrischall/artsonia-mcp/issues/113)) ([1d4e0ab](https://github.com/chrischall/artsonia-mcp/commit/1d4e0ab44151eb0e2694a86976e3cf1a220b889d))
+
+
+### Bug Fixes
+
+* **cache:** give each user a genuinely distinct cache file ([#118](https://github.com/chrischall/artsonia-mcp/issues/118)) ([17b6474](https://github.com/chrischall/artsonia-mcp/commit/17b647489066c2107b81a834d58e1ae61b85298f)), closes [#117](https://github.com/chrischall/artsonia-mcp/issues/117)
+* give each user its own session cache, and typecheck the tests ([#116](https://github.com/chrischall/artsonia-mcp/issues/116)) ([f30bf62](https://github.com/chrischall/artsonia-mcp/commit/f30bf62668fc8fe6f926ad5eacdf045e02faa966)), closes [#114](https://github.com/chrischall/artsonia-mcp/issues/114)
+
+
+### Documentation
+
+* publish the cache env vars in server.json and .env.example ([#119](https://github.com/chrischall/artsonia-mcp/issues/119)) ([0ef817e](https://github.com/chrischall/artsonia-mcp/commit/0ef817e3a35d526d1c600a45e7ab524d554f47c1))
+
 ## [0.9.0](https://github.com/chrischall/artsonia-mcp/compare/v0.8.4...v0.9.0) (2026-08-09)
 
 
