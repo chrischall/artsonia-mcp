@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   createFileStatePersistence,
   resolveStateFile,
@@ -29,8 +30,20 @@ export interface StoredArtsoniaSession {
  * the operator who already knows it and no more revealing than the directory.
  */
 function fileSegment(username: string): string {
-  const safe = username.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
-  return safe === '' ? 'default' : safe.slice(0, 64);
+  const normalized = username.trim().toLowerCase();
+  const safe = normalized.replace(/[^a-z0-9._-]+/g, '_').slice(0, 40);
+  // The readable part alone is NOT unique, from two directions: the character
+  // class collapses any run of specials to one '_' (alice+bob@ and alice_bob@
+  // land on the same name), and the truncation collides for addresses sharing a
+  // long prefix. Either way two users share one file, each save clobbers the
+  // other, and both then fail their own binding check — precisely the bug the
+  // per-user path was added to fix, back again and silent.
+  //
+  // So the identity is carried by a digest of the FULL normalized username; the
+  // prefix is there only to keep the directory legible. Normalized before
+  // hashing so the path matches case-insensitively, as the binding does.
+  const digest = createHash('sha256').update(normalized).digest('hex').slice(0, 12);
+  return safe === '' ? digest : `${safe}-${digest}`;
 }
 
 /**

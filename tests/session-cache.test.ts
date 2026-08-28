@@ -30,10 +30,11 @@ const record = (cookieHeader = 'ASPSESSIONID=abc; member=42') => ({
   sessionAt: Date.now(),
 });
 
-// One file PER USER now, so the helper has to mirror the sanitiser in
-// session-cache.ts rather than assume a single session.json.
+// One file PER USER, so the helper asks the module for the path rather than
+// re-deriving it. Mirroring the sanitiser by hand is what let the collision bug
+// hide: a copied regex agrees with the original even when both are wrong.
 const cacheFile = (d: string, user = 'parent@example.com'): string =>
-  join(d, '.artsonia-mcp', `session-${user.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '_')}.json`);
+  sessionCachePath({ MCP_DATA_DIR: d }, user);
 
 describe('jarFromHeader', () => {
   it('round-trips a live jar through its rendered header', () => {
@@ -197,6 +198,25 @@ describe('two users in one process', () => {
     createSessionCache({ env: a, username: 'alice@example.com', password: 'pw1' })!.save(record());
     const rotated = createSessionCache({ env: a, username: 'alice@example.com', password: 'pw2' })!;
     expect(rotated.load()).toBeNull();
+  });
+
+  it.each([
+    ['characters that normalize to the same underscore', 'alice+bob@example.com', 'alice_bob@example.com'],
+    ['a shared 64-character prefix', `${'a'.repeat(64)}one@example.com`, `${'a'.repeat(64)}two@example.com`],
+  ])('keeps them apart despite %s', (_label, userA, userB) => {
+    // A collision is not a security hole — the salted binding still rejects the
+    // other user's record — but it silently reinstates the very bug the
+    // per-user path was added to fix: two clients sharing one file, each save
+    // clobbering the other, so NEITHER ever gets a hit.
+    const a = { MCP_DATA_DIR: dir, ARTSONIA_SESSION_CACHE: 'true' };
+    expect(sessionCachePath(a, userA)).not.toBe(sessionCachePath(a, userB));
+
+    const one = createSessionCache({ env: a, username: userA, password: 'pw' })!;
+    const two = createSessionCache({ env: a, username: userB, password: 'pw' })!;
+    one.save(record('SID=one'));
+    two.save(record('SID=two'));
+    expect(one.load()?.session.cookieHeader).toBe('SID=one');
+    expect(two.load()?.session.cookieHeader).toBe('SID=two');
   });
 
   it('an explicit ARTSONIA_SESSION_FILE still wins outright', () => {
