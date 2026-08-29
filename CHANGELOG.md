@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/chrischall/artsonia-mcp/compare/v0.10.1...v0.11.0) (2026-08-29)
+
+
+### Features
+
+* **deps:** take @fetchproxy/server 2.2.0 so the concentrator can bind its sandbox address ([#123](https://github.com/chrischall/artsonia-mcp/issues/123)) ([8f0abea](https://github.com/chrischall/artsonia-mcp/commit/8f0abea9edc9fac31a591698d995a77e7b05c465))
+
 ## [0.10.1](https://github.com/chrischall/artsonia-mcp/compare/v0.10.0...v0.10.1) (2026-08-28)
 
 
