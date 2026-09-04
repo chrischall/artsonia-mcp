@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { textResult, toolAnnotations } from '@chrischall/mcp-utils';
+import { minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseAwards, parseProfile } from '../parse.js';
 
@@ -16,7 +16,7 @@ export function registerAccountTools(server: McpServer, client: ArtsoniaClient):
     },
     async ({ artist_id }) => {
       const awards = parseAwards(await client.fetchHtml(`/artists/awards.asp?id=${artist_id}`));
-      return textResult({
+      return minifiedResult({
         artist_id,
         earned_count: awards.filter((a) => a.earned).length,
         awards,
@@ -33,6 +33,6 @@ export function registerAccountTools(server: McpServer, client: ArtsoniaClient):
       annotations: toolAnnotations({ title: 'Get your account profile', readOnly: true, openWorld: true }),
       inputSchema: {},
     },
-    async () => textResult(parseProfile(await client.fetchHtml('/members/profile/'))),
+    async () => minifiedResult(parseProfile(await client.fetchHtml('/members/profile/'))),
   );
 }

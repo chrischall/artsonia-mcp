@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult, toolAnnotations, readEnvVar, messageOf } from '@chrischall/mcp-utils';
+import { messageOf, minifiedResult, readEnvVar, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseStudents } from '../parse.js';
 
@@ -16,7 +16,7 @@ export function registerHealthcheckTools(server: McpServer, client: ArtsoniaClie
       const transport = readEnvVar('ARTSONIA_TRANSPORT') ?? 'fetch';
       try {
         const students = parseStudents(await client.fetchHtml('/members/'));
-        return textResult({
+        return minifiedResult({
           ok: true,
           authenticated: true,
           transport,
@@ -26,7 +26,7 @@ export function registerHealthcheckTools(server: McpServer, client: ArtsoniaClie
       } catch (e) {
         const msg = messageOf(e);
         const noCreds = /environment variables are required/.test(msg);
-        return textResult({
+        return minifiedResult({
           ok: false,
           authenticated: false,
           transport,

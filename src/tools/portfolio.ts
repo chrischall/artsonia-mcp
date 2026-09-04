@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { textResult, toolAnnotations, NumericIdString, mapWithConcurrency } from '@chrischall/mcp-utils';
+import { NumericIdString, mapWithConcurrency, minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork } from '../parse.js';
 import { FETCH_CONCURRENCY } from './download.js';
@@ -23,7 +23,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     },
     async ({ artist_id, include_details }) => {
       const tiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
-      if (!include_details) return textResult({ artist_id, artworks: tiles });
+      if (!include_details) return minifiedResult({ artist_id, artworks: tiles });
       const artworks = await mapWithConcurrency(tiles, FETCH_CONCURRENCY, async (tile) => {
         const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${tile.artwork_id}`));
         // Merge only the scalar detail (title/screen-name/views/grade/project);
@@ -33,7 +33,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
         const { comments: _comments, comment_entry: _commentEntry, ...scalar } = detail;
         return { ...tile, ...scalar };
       });
-      return textResult({ artist_id, artworks });
+      return minifiedResult({ artist_id, artworks });
     },
   );
   server.registerTool(
@@ -44,7 +44,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       annotations: toolAnnotations({ title: 'Get artwork detail', openWorld: true }),
       inputSchema: { artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') },
     },
-    async ({ artwork_id }) => textResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
+    async ({ artwork_id }) => minifiedResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
   );
   server.registerTool(
     'artsonia_list_comments',
@@ -56,7 +56,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     },
     async ({ artwork_id }) => {
       const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`));
-      return textResult({ artwork_id, comments: detail.comments });
+      return minifiedResult({ artwork_id, comments: detail.comments });
     },
   );
 }

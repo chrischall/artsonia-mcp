@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { textResult, toolAnnotations } from '@chrischall/mcp-utils';
+import { minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFans } from '../parse.js';
 
@@ -13,6 +13,6 @@ export function registerFanTools(server: McpServer, client: ArtsoniaClient): voi
       annotations: toolAnnotations({ title: "Get a student's fan club", openWorld: true }),
       inputSchema: { artist_id: z.string().regex(/^\d+$/, 'must be a numeric id').describe('Student artist_id.') },
     },
-    async ({ artist_id }) => textResult({ artist_id, fans: parseFans(await client.fetchHtml(`/members/fanclub/?artist=${artist_id}`)) }),
+    async ({ artist_id }) => minifiedResult({ artist_id, fans: parseFans(await client.fetchHtml(`/members/fanclub/?artist=${artist_id}`)) }),
   );
 }

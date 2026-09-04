@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { textResult, toolAnnotations, schemaConfirm, NumericIdString } from '@chrischall/mcp-utils';
+import { NumericIdString, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
 
@@ -21,7 +21,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     },
     async ({ artist_id }) => {
       const feedback = parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`));
-      return textResult({
+      return minifiedResult({
         artist_id,
         unread_count: feedback.filter((f) => !f.is_read).length,
         feedback,
@@ -45,7 +45,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       const path = `/members/feedback/default.asp?artist=${artist_id}`;
       const body = new URLSearchParams({ ConfirmAsRead: 'Mark as Read' }).toString();
       if (confirm !== true) {
-        return textResult({
+        return minifiedResult({
           preview: true,
           action: 'mark_feedback_read',
           note: 'DRY RUN — nothing was sent. Re-run with confirm: true to mark ALL of this student\'s feedback as read.',
@@ -57,7 +57,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       // drops). Re-read the feedback page and confirm nothing is still unread.
       const remaining = await unreadCount(client, artist_id);
       const verified = remaining === 0;
-      return textResult({
+      return minifiedResult({
         marked_read: verified,
         verified,
         unread_remaining: remaining,

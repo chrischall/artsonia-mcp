@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { join, basename, dirname, relative } from 'node:path';
-import { textResult, toolAnnotations, schemaConfirm, expandPath, messageOf, NumericIdString, mapWithConcurrency } from '@chrischall/mcp-utils';
+import { NumericIdString, expandPath, mapWithConcurrency, messageOf, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
 
@@ -270,7 +270,7 @@ export function registerDownloadTools(
           }
         });
         const estimatedTotal = [...estimates.values()].reduce((a, b) => a + b, 0);
-        return textResult({
+        return minifiedResult({
           preview: true,
           action: 'download_artwork',
           note: `DRY RUN — would download ${items.length} image(s) at "${resolution}" resolution to ${destDir}. Re-run with confirm: true to download.`,
@@ -443,7 +443,7 @@ export function registerDownloadTools(
         }
       }
 
-      const result = textResult({
+      const result = minifiedResult({
         downloaded_count: downloaded.length,
         skipped_count: skipped.length,
         failed_count: failed.length,
