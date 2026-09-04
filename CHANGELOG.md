@@ -5,7 +5,7 @@
 
 ### Features
 
-* **tools:** compact by default — strip media URLs, and minify every response ([#135](https://github.com/chrischall/artsonia-mcp/issues/135)) ([9559b52](https://github.com/chrischall/artsonia-mcp/commit/9559b52f1e403d7bfc7269117c8f63a3d66b7694))
+* **tools:** minify every response — no formatting whitespace on any payload ([#135](https://github.com/chrischall/artsonia-mcp/issues/135)) ([9559b52](https://github.com/chrischall/artsonia-mcp/commit/9559b52f1e403d7bfc7269117c8f63a3d66b7694))
 
 ## [0.11.0](https://github.com/chrischall/artsonia-mcp/compare/v0.10.1...v0.11.0) (2026-08-29)
 
