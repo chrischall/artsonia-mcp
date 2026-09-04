@@ -7,7 +7,7 @@
   },
   "metadata": {
     "description": "MCP server for Artsonia — natural-language access to student-art portfolios, comments, and fans",
-    "version": "0.11.0"
+    "version": "0.12.0"
   },
   "plugins": [
     {
@@ -15,7 +15,7 @@
       "displayName": "Artsonia",
       "source": "./",
       "description": "MCP server for Artsonia — access student portfolios, post comments, and manage fans via natural language",
-      "version": "0.11.0",
+      "version": "0.12.0",
       "author": {
         "name": "Chris Hall"
       },
