@@ -1,11 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { parse } from 'node-html-parser';
-import { textResult, toolAnnotations, schemaConfirm, NumericIdString } from '@chrischall/mcp-utils';
+import { NumericIdString, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 
 function previewResult(action: string, wouldSend: Record<string, unknown>, caveat?: string) {
-  return textResult({
+  return minifiedResult({
     preview: true,
     action,
     note: `DRY RUN — nothing was sent. Re-run with confirm: true to perform this write.${caveat ? ` ${caveat}` : ''}`,
@@ -70,7 +70,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       // A 3xx only means Artsonia accepted the POST — not that the comment was
       // persisted (it 302s even on payloads it silently drops), and there is no
       // cheap per-comment re-read to confirm. Report honestly.
-      return textResult({
+      return minifiedResult({
         submitted: true,
         verified: false,
         note: 'Artsonia accepted the comment (HTTP ' + res.status + '), but this server cannot confirm it persisted. Check the artwork page to verify.',
@@ -113,7 +113,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       }
       const res = await client.write(path, params.toString());
       // 3xx ⇒ accepted, not confirmed-sent; no cheap re-read for a pending invite.
-      return textResult({
+      return minifiedResult({
         submitted: true,
         verified: false,
         note: 'Artsonia accepted the invite (HTTP ' + res.status + '), but this server cannot confirm the email was sent. Ask the fan to check their inbox.',
@@ -140,7 +140,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     async ({ news, artist_activity, promos, confirm }) => {
       const desired: Record<string, boolean | undefined> = { news, artist_activity, promos };
       if (news === undefined && artist_activity === undefined && promos === undefined) {
-        return textResult({ error: 'Specify at least one of news / artist_activity / promos.' });
+        return minifiedResult({ error: 'Specify at least one of news / artist_activity / promos.' });
       }
       const { fields, checkboxes, checkboxValues } = parseProfileForm(await client.fetchHtml('/members/profile/'));
       const nextChecks = { ...checkboxes };
@@ -183,7 +183,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         persisted.OptInNews === resultingOptIns.OptInNews &&
         persisted.OptInArtistActivity === resultingOptIns.OptInArtistActivity &&
         persisted.OptInPromos === resultingOptIns.OptInPromos;
-      return textResult({
+      return minifiedResult({
         updated: verified,
         verified,
         optIns: persisted,
