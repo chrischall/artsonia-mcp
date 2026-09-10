@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.1](https://github.com/chrischall/artsonia-mcp/compare/v0.12.0...v0.12.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.10.0 and @chrischall/mcp-utils 0.26.1 ([#147](https://github.com/chrischall/artsonia-mcp/issues/147)) ([3cf0823](https://github.com/chrischall/artsonia-mcp/commit/3cf082303c3102355d7870c195a28e3fa46aa01e))
+* **deps:** bump hono from 4.13.0 to 4.13.7 ([#145](https://github.com/chrischall/artsonia-mcp/issues/145)) ([dcdc0d2](https://github.com/chrischall/artsonia-mcp/commit/dcdc0d21b135dd2f14230f4eb2684a1fb73a6dfb))
+* **deps:** declare the peer floors mcp-utils 0.26.1 requires ([#149](https://github.com/chrischall/artsonia-mcp/issues/149)) ([e95eb18](https://github.com/chrischall/artsonia-mcp/commit/e95eb187542c5aa753d13bf9e2f9b45fee10edb7)), closes [#148](https://github.com/chrischall/artsonia-mcp/issues/148)
+
 ## [0.12.0](https://github.com/chrischall/artsonia-mcp/compare/v0.11.0...v0.12.0) (2026-09-04)
 
 
