@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.2](https://github.com/chrischall/artsonia-mcp/compare/v0.12.1...v0.12.2) (2026-09-11)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 2.11.3, so the hosted extension pin persists ([#150](https://github.com/chrischall/artsonia-mcp/issues/150)) ([5d5bd95](https://github.com/chrischall/artsonia-mcp/commit/5d5bd95f1bef88d6244a05a604da60f10371091d))
+* **deps:** bump node-html-parser in the production-dependencies group ([#153](https://github.com/chrischall/artsonia-mcp/issues/153)) ([c3e7608](https://github.com/chrischall/artsonia-mcp/commit/c3e760838d482f2335354e6ef547241ec9484711))
+
 ## [0.12.1](https://github.com/chrischall/artsonia-mcp/compare/v0.12.0...v0.12.1) (2026-09-10)
 
 
