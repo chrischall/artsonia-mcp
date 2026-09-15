@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/chrischall/artsonia-mcp/compare/v0.12.2...v0.12.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* **deps:** @fetchproxy/server 3.0.1 — capped peer frames, logged load drops, atomic identity writes ([#155](https://github.com/chrischall/artsonia-mcp/issues/155)) ([7c8adc3](https://github.com/chrischall/artsonia-mcp/commit/7c8adc37ec9a1203737d6bfe2b5e3e96d944c079))
+
 ## [0.12.2](https://github.com/chrischall/artsonia-mcp/compare/v0.12.1...v0.12.2) (2026-09-14)
 
 
