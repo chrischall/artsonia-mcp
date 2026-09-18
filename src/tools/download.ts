@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { join, basename, dirname, relative } from 'node:path';
 import { NumericIdString, expandPath, mapWithConcurrency, messageOf, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
@@ -166,7 +166,7 @@ export function registerDownloadTools(
       description:
         "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Without confirm:true this is a DRY RUN that lists the resolved filenames with estimated bytes and writes nothing. write_metadata:true also saves each artwork's comments + teacher feedback as a .json sidecar next to its image. embed_metadata:true embeds title/project/grade/date into each JPEG's EXIF/IPTC. path_template (e.g. \"{grade}/{project}\" or \"{school_year}\") organizes downloads into subfolders for multi-year archives. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing.'),
         project: z.string().min(1).optional().describe('Only artworks whose school-project/class name contains this (case-insensitive).'),
@@ -182,7 +182,7 @@ export function registerDownloadTools(
         embed_metadata: z.boolean().default(false).describe("Embed each image's title/project/grade and source date (its Last-Modified, same as date_source) into the JPEG's EXIF (ImageDescription, DateTimeOriginal) and IPTC (title, keywords, date) so the metadata survives renames/moves and is searchable in Spotlight/Apple Photos. Needs each artwork's detail page (slower); applies to freshly downloaded files only (skipped files are left untouched). Off by default."),
         include_private: z.boolean().default(true).describe('Include artworks marked private in the portfolio. Set false to exclude them (excluded count is reported as private_excluded_count).'),
         confirm: schemaConfirm,
-      },
+      }),
     },
     async ({ artist_id, dest, project, grade, limit, resolution, filename_template, path_template, set_mtime_from_source, skip_existing, write_index, write_metadata, embed_metadata, include_private, confirm }) => {
       const template = filename_template;

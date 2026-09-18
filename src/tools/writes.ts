@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { parse } from 'node-html-parser';
 import { NumericIdString, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
@@ -55,12 +55,12 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: 'Post a comment on an artwork',
       description: "Post a comment on a student's artwork. Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
       annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).'),
         comment: z.string().min(1).describe('The comment text to post.'),
         confirm: schemaConfirm,
-      },
+      }),
     },
     async ({ artist_id, artwork_id, comment, confirm }) => {
       const path = `/museum/enter.asp?artist=${artist_id}&art=${artwork_id}`;
@@ -87,7 +87,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: "Invite a fan to a student's fan club",
       description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. Without confirm:true this is a DRY RUN. Use only real addresses you're authorized to invite (test with @example.com).",
       annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         first_name: z.string().min(1).describe("Fan's first name."),
         last_name: z.string().min(1).describe("Fan's last name."),
@@ -95,7 +95,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         relationship_id: NumericIdString.describe('Relationship code (RelationshipID select value from the Add Fans form).'),
         is_parent: z.boolean().default(false).describe('Whether this fan is also a parent/guardian.'),
         confirm: schemaConfirm,
-      },
+      }),
     },
     async ({ artist_id, first_name, last_name, email, relationship_id, is_parent, confirm }) => {
       const path = `/members/fanclub/add.asp?artist=${artist_id}`;
@@ -130,12 +130,12 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: 'Set notification preferences',
       description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. Without confirm:true this is a DRY RUN showing the resulting state.",
       annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         news: z.boolean().optional().describe('OptInNews — general Artsonia news emails.'),
         artist_activity: z.boolean().optional().describe('OptInArtistActivity — emails about your student(s) activity.'),
         promos: z.boolean().optional().describe('OptInPromos — promotional/keepsake emails.'),
         confirm: schemaConfirm,
-      },
+      }),
     },
     async ({ news, artist_activity, promos, confirm }) => {
       const desired: Record<string, boolean | undefined> = { news, artist_activity, promos };
