@@ -1,4 +1,5 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 import { NumericIdString, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
@@ -17,7 +18,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       description:
         "List the teacher feedback left on a student's artwork — each item's message, who posted it and when, the artwork it's about, and whether it's been marked as read. Pass the artist_id from artsonia_list_students.",
       annotations: toolAnnotations({ title: 'Get teacher feedback for a student', readOnly: true, openWorld: true }),
-      inputSchema: { artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).') },
+      inputSchema: z.object({ artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).') }),
     },
     async ({ artist_id }) => {
       const feedback = parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`));
@@ -36,10 +37,10 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       description:
         "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
       annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         confirm: schemaConfirm,
-      },
+      }),
     },
     async ({ artist_id, confirm }) => {
       const path = `/members/feedback/default.asp?artist=${artist_id}`;

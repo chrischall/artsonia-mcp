@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { NumericIdString, mapWithConcurrency, minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
@@ -13,13 +13,13 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       description:
         "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students. Set include_details:true to also fetch each artwork's full detail (title, project, grade, views, …) in one call — this fetches a detail page per artwork (slower), so leave it off when the lean tiles are enough.",
       annotations: toolAnnotations({ title: "Get a student's portfolio", openWorld: true }),
-      inputSchema: {
+      inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         include_details: z
           .boolean()
           .default(false)
           .describe('Fetch each artwork\'s full detail (title/project/grade/views/…) concurrently and merge it into the rows. Off by default (lean tiles, one request).'),
-      },
+      }),
     },
     async ({ artist_id, include_details }) => {
       const tiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
@@ -42,7 +42,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       title: 'Get artwork detail',
       description: 'Get one artwork: title, artist screen-name, view count, project (assignment name), and the comments on it. Pass an artwork_id from a portfolio.',
       annotations: toolAnnotations({ title: 'Get artwork detail', openWorld: true }),
-      inputSchema: { artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') },
+      inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
     async ({ artwork_id }) => minifiedResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
   );
@@ -52,7 +52,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       title: 'List comments on an artwork',
       description: 'List the comments on a given artwork (author + text). Pass an artwork_id from a portfolio.',
       annotations: toolAnnotations({ title: 'List comments on an artwork', openWorld: true }),
-      inputSchema: { artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') },
+      inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
     async ({ artwork_id }) => {
       const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`));

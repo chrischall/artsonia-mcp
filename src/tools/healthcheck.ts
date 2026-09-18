@@ -1,4 +1,5 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 import { messageOf, minifiedResult, readEnvVar, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseStudents } from '../parse.js';
@@ -10,7 +11,7 @@ export function registerHealthcheckTools(server: McpServer, client: ArtsoniaClie
       title: 'Verify Artsonia auth + connectivity',
       description: 'Confirm credentials are configured, log in, fetch the dashboard, and report {authenticated, transport, student_count} with a plain-English hint distinguishing "no creds" vs "bad creds" vs "site error". Read-only.',
       annotations: toolAnnotations({ title: 'Verify Artsonia auth + connectivity', readOnly: true, idempotent: true, openWorld: true }),
-      inputSchema: {},
+      inputSchema: z.object({}),
     },
     async () => {
       const transport = readEnvVar('ARTSONIA_TRANSPORT') ?? 'fetch';

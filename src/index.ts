@@ -11,7 +11,7 @@ import { registerAccountTools } from './tools/account.js';
 import { registerDownloadTools } from './tools/download.js';
 import { makeDownloadIO } from './tools/make-download-io.js';
 import { registerWriteTools } from './tools/writes.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 // The client is a module-level singleton (constructed in client.ts) so the
 // deferred-config-error pattern holds: the server boots and answers the host's
