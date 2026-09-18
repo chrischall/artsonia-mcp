@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/chrischall/artsonia-mcp/compare/v0.12.3...v1.0.0) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** migrate server to SDK v2 ([#162](https://github.com/chrischall/artsonia-mcp/issues/162))
+
+### Features
+
+* **mcp:** migrate server to SDK v2 ([#162](https://github.com/chrischall/artsonia-mcp/issues/162)) ([7f5ab43](https://github.com/chrischall/artsonia-mcp/commit/7f5ab434e846767ac6113df950816dde8955bb6e))
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group with 2 updates ([#160](https://github.com/chrischall/artsonia-mcp/issues/160)) ([b88f1a4](https://github.com/chrischall/artsonia-mcp/commit/b88f1a44c87e84739d489770adcad15342d9edc9))
+* **deps:** raise the Node floor to 20, which SDK v2 requires ([#164](https://github.com/chrischall/artsonia-mcp/issues/164)) ([0d4d35f](https://github.com/chrischall/artsonia-mcp/commit/0d4d35ff1b6ac48dbc97dfbb0488f18f7d8a20a0)), closes [#163](https://github.com/chrischall/artsonia-mcp/issues/163)
+
 ## [0.12.3](https://github.com/chrischall/artsonia-mcp/compare/v0.12.2...v0.12.3) (2026-09-15)
 
 
