@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/chrischall/artsonia-mcp/compare/v1.0.0...v1.1.0) (2026-09-19)
+
+
+### Features
+
+* **deps:** take mcp-utils 1.0.0, so server/discover works again ([#165](https://github.com/chrischall/artsonia-mcp/issues/165)) ([e9438a1](https://github.com/chrischall/artsonia-mcp/commit/e9438a197436b2a08291b181288bf6b12189a82a))
+
 ## [1.0.0](https://github.com/chrischall/artsonia-mcp/compare/v0.12.3...v1.0.0) (2026-09-18)
 
 
