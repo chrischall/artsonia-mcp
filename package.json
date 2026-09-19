@@ -21,7 +21,7 @@
   ],
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.0.0"
   },
   "bin": {
     "artsonia-mcp": "dist/index.js"
@@ -45,7 +45,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json"
   },
   "dependencies": {
-    "@chrischall/mcp-utils": "^0.28.0",
+    "@chrischall/mcp-utils": "^1.0.0",
     "@fetchproxy/server": "^3.0.1",
     "@modelcontextprotocol/server": "^2.0.0",
     "dotenv": "^17.4.0",
