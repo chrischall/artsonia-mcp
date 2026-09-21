@@ -116,14 +116,14 @@ Notable args:
 
 Versioning is automated by **release-please** (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`). On every push to `main` it scans Conventional-Commit messages and opens/updates a `chore(main): release X.Y.Z` PR that bumps every registered file. Merging that release PR creates the `v<VERSION>` tag + GitHub Release, and the `publish` job packs `.mcpb` + `.skill`, publishes to npm (with provenance), the MCP Registry, and ClawHub.
 
-The version string (currently `0.6.0`) is mirrored across these files — release-please owns all of them via `extra-files`; **do NOT bump manually**:
+The version string is mirrored across these files — release-please owns all of them via `extra-files`; **do NOT bump manually**:
 
 - `package.json` (`version`) + `package-lock.json`
 - `src/version.ts` (`VERSION`, the `x-release-please-version` marker)
 - `manifest.json` (`$.version`)
 - `server.json` (`$.version` AND `$.packages[*].version`)
-- `.Codex-plugin/plugin.json` (`$.version`)
-- `.Codex-plugin/marketplace.json` (`$.plugins[*].version` AND `$.metadata.version`)
+- `.claude-plugin/plugin.json` (`$.version`)
+- `.claude-plugin/marketplace.json` (`$.plugins[*].version` AND `$.metadata.version`)
 - `.release-please-manifest.json`
 
 `tests/` includes a version-sync test asserting `src/version.ts` equals `package.json`.
@@ -141,7 +141,7 @@ jq -r '.description | length' server.json
 
 Fleet policy — Conventional-Commit PR titles, labels, the auto-review /
 auto-merge ladder, auto-review follow-up issues, PR timing, and release PRs —
-lives in `~/.Codex/AGENTS.md`. Don't restate it here; the copies drifted.
+lives in `~/.codex/AGENTS.md`. Don't restate it here; the copies drifted.
 
 Shared technical conventions (publishing, bundling, versioning guards,
 write-verification, transport archetypes, testing traps) live in
