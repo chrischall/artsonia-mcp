@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/chrischall/artsonia-mcp/compare/v1.1.0...v1.1.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* **tools:** say which writes are destructive ([#167](https://github.com/chrischall/artsonia-mcp/issues/167)) ([31f8901](https://github.com/chrischall/artsonia-mcp/commit/31f89012d2c1d12419b3bd5dad2b87a32b79e0d0))
+
 ## [1.1.0](https://github.com/chrischall/artsonia-mcp/compare/v1.0.0...v1.1.0) (2026-09-19)
 
 
