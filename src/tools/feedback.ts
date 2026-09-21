@@ -36,7 +36,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       title: 'Mark a student\'s feedback as read',
       description:
         "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
-      annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true }),
+      annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         confirm: schemaConfirm,

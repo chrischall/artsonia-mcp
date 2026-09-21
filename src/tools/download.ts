@@ -165,7 +165,7 @@ export function registerDownloadTools(
       title: "Download a student's artwork images",
       description:
         "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Without confirm:true this is a DRY RUN that lists the resolved filenames with estimated bytes and writes nothing. write_metadata:true also saves each artwork's comments + teacher feedback as a .json sidecar next to its image. embed_metadata:true embeds title/project/grade/date into each JPEG's EXIF/IPTC. path_template (e.g. \"{grade}/{project}\" or \"{school_year}\") organizes downloads into subfolders for multi-year archives. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
-      annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true }),
+      annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing.'),

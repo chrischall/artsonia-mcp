@@ -54,7 +54,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     {
       title: 'Post a comment on an artwork',
       description: "Post a comment on a student's artwork. Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
-      annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true }),
+      annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).'),
@@ -86,7 +86,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     {
       title: "Invite a fan to a student's fan club",
       description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. Without confirm:true this is a DRY RUN. Use only real addresses you're authorized to invite (test with @example.com).",
-      annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true }),
+      annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         first_name: z.string().min(1).describe("Fan's first name."),
@@ -129,7 +129,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     {
       title: 'Set notification preferences',
       description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. Without confirm:true this is a DRY RUN showing the resulting state.",
-      annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true }),
+      annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         news: z.boolean().optional().describe('OptInNews — general Artsonia news emails.'),
         artist_activity: z.boolean().optional().describe('OptInArtistActivity — emails about your student(s) activity.'),
