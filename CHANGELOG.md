@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/chrischall/artsonia-mcp/compare/v1.1.1...v1.1.2) (2026-09-21)
+
+
+### Documentation
+
+* AGENTS.md should not say it is guidance for Claude ([#170](https://github.com/chrischall/artsonia-mcp/issues/170)) ([048bddd](https://github.com/chrischall/artsonia-mcp/commit/048bddd79d7ab5bc7056def6a1d81e2cba62f61a))
+
 ## [1.1.1](https://github.com/chrischall/artsonia-mcp/compare/v1.1.0...v1.1.1) (2026-09-21)
 
 
