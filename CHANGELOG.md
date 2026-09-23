@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.4](https://github.com/chrischall/artsonia-mcp/compare/v1.1.3...v1.1.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* complete the .mcpb tool list and time out stalled artwork downloads ([#175](https://github.com/chrischall/artsonia-mcp/issues/175)) ([acbbae8](https://github.com/chrischall/artsonia-mcp/commit/acbbae859a43c2852c0da5f5be5c5c874fb1b048))
+
 ## [1.1.3](https://github.com/chrischall/artsonia-mcp/compare/v1.1.2...v1.1.3) (2026-09-23)
 
 
