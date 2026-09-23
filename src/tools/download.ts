@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { join, basename, dirname, relative } from 'node:path';
-import { NumericIdString, expandPath, mapWithConcurrency, messageOf, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
+import { NumericIdString, expandPath, mapWithConcurrency, messageOf, minifiedResult, schemaConfirm, toolAnnotations, withAmbientCancellation } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
 
@@ -148,6 +148,23 @@ type Outcome =
   | { kind: 'skipped'; artwork_id: string; file: string }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
+/** Per-request deadline for an image CDN fetch (matches the page transport's). */
+const IMAGE_FETCH_TIMEOUT_MS = 30_000;
+
+/**
+ * Signal for one image CDN request. These go to global `fetch`, not the page
+ * transport, so without their own deadline a stalled connection to
+ * images.artsonia.com hangs its pool worker forever (six stalls hang the whole
+ * call); combined with the caller's cancellation so a cancelled portfolio pull
+ * stops downloading.
+ */
+const imageFetchSignal = (): AbortSignal =>
+  withAmbientCancellation(AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS)) as AbortSignal;
+
+/** Per-item failure reason, naming a deadline expiry plainly. */
+const failureReason = (e: unknown): string =>
+  e instanceof Error && e.name === 'TimeoutError' ? `timed out after ${IMAGE_FETCH_TIMEOUT_MS / 1000}s` : messageOf(e);
+
 /**
  * `makeIO` is called ONCE PER INVOCATION, not once per registration. A
  * filesystem-free IO accumulates image bytes and drains them on read, so a
@@ -262,7 +279,7 @@ export function registerDownloadTools(
         const estimates = new Map<string, number>();
         await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it) => {
           try {
-            const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD' });
+            const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD', signal: imageFetchSignal() });
             const len = Number(res.headers.get('content-length'));
             if (res.ok && Number.isFinite(len) && len > 0) estimates.set(it.artwork_id, len);
           } catch {
@@ -300,7 +317,7 @@ export function registerDownloadTools(
           let file = deferredNaming ? null : fileOf(it, '');
           if (file && skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
 
-          const res = await fetch(artworkImageUrl(it.artwork_id, resolution));
+          const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { signal: imageFetchSignal() });
           if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
 
           // Parse Last-Modified defensively — a malformed header must NOT fail the
@@ -342,7 +359,7 @@ export function registerDownloadTools(
             ...(embedded !== undefined ? { embedded } : {}),
           };
         } catch (e) {
-          return { kind: 'failed', artwork_id: it.artwork_id, reason: messageOf(e) };
+          return { kind: 'failed', artwork_id: it.artwork_id, reason: failureReason(e) };
         }
       });
 

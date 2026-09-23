@@ -52,13 +52,6 @@
       "description": "Your Artsonia account password",
       "required": true,
       "sensitive": true
-    },
-    "artsonia_transport": {
-      "type": "string",
-      "title": "Transport (optional)",
-      "description": "Override transport mode: 'stdio' (default), 'sse', or 'fetchproxy'",
-      "required": false,
-      "sensitive": false
     }
   },
   "tools": [
@@ -89,6 +82,26 @@
     {
       "name": "artsonia_get_fans",
       "description": "Get the fan list for a student"
+    },
+    {
+      "name": "artsonia_get_awards",
+      "description": "Get a student's awards and achievement badges"
+    },
+    {
+      "name": "artsonia_get_profile",
+      "description": "Get your parent/fan account profile and notification settings"
+    },
+    {
+      "name": "artsonia_get_feedback",
+      "description": "Get teacher feedback on a student's artwork"
+    },
+    {
+      "name": "artsonia_mark_feedback_read",
+      "description": "Mark all of a student's teacher feedback as read"
+    },
+    {
+      "name": "artsonia_download_artwork",
+      "description": "Download a student's artwork images to a local folder (writes files to disk)"
     },
     {
       "name": "artsonia_post_comment",
