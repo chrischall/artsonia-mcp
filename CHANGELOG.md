@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3](https://github.com/chrischall/artsonia-mcp/compare/v1.1.2...v1.1.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* **deps:** require zod ^4.6.5 to match @chrischall/mcp-utils 2.4.0 ([#174](https://github.com/chrischall/artsonia-mcp/issues/174)) ([b89fc36](https://github.com/chrischall/artsonia-mcp/commit/b89fc36086274c758eda38507d495fe89b043ffc))
+* **deps:** upgrade @chrischall/mcp-utils to 2.4.0 and @fetchproxy/* to 3.2.0 ([#172](https://github.com/chrischall/artsonia-mcp/issues/172)) ([8c71fb7](https://github.com/chrischall/artsonia-mcp/commit/8c71fb7b809e4ddd89885829d82824bbc8eeb651))
+
 ## [1.1.2](https://github.com/chrischall/artsonia-mcp/compare/v1.1.1...v1.1.2) (2026-09-21)
 
 
