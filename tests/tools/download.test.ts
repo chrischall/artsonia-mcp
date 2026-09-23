@@ -265,7 +265,7 @@ describe('artsonia_download_artwork', () => {
 
   it('resolution flows through to the CDN url', async () => {
     await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 1, resolution: 'large', filename_template: '{artwork_id}', confirm: true });
-    expect(mockFetch).toHaveBeenCalledWith('https://images.artsonia.com/art/large/300.jpg');
+    expect(mockFetch).toHaveBeenCalledWith('https://images.artsonia.com/art/large/300.jpg', expect.anything());
   });
 
   it('without write_index, no manifest is written and result has no index_file', async () => {
@@ -556,5 +556,98 @@ describe('artsonia_download_artwork', () => {
     expect(out.embedded_count).toBe(3);
     const exif = piexif.load(readFileSync(join(dir, '300.jpg')).toString('latin1'));
     expect(exif['0th']![piexif.TagValues.ImageIFD.ImageDescription]).toBe('My silhouette');
+  });
+});
+
+// Image CDN fetches go straight to global fetch (not the page transport), so
+// they need their own deadline and must honour the caller's cancellation — a
+// stalled connection to images.artsonia.com otherwise hangs its pool worker
+// forever, and six of them hang the whole call.
+describe('artsonia_download_artwork — image fetch deadline & cancellation', () => {
+  /** A fetch that never answers until its signal aborts, then rejects with the reason. */
+  const stalledFetch = (init?: RequestInit) =>
+    new Promise<Response>((_, reject) => {
+      const signal = init?.signal;
+      if (!signal) return; // no signal → hangs forever (the bug)
+      if (signal.aborted) return reject(signal.reason);
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  const until = async (cond: () => boolean) => {
+    for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5));
+    expect(cond()).toBe(true);
+  };
+
+  let timeouts: AbortController[];
+  let timeoutSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    timeouts = [];
+    // Stand-in for the real 30s timer so the test controls when it fires.
+    timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+      const ac = new AbortController();
+      timeouts.push(ac);
+      return ac.signal;
+    });
+  });
+  afterEach(() => { timeoutSpy.mockRestore(); });
+
+  it('a stalled image GET times out into a per-item failure; the rest still download', async () => {
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    try {
+      mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
+        String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
+      const call = h.callTool('artsonia_download_artwork', {
+        artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true,
+      });
+      await until(() => mockFetch.mock.calls.length === 3 && timeouts.length >= 3);
+      expect(timeoutSpy).toHaveBeenCalledWith(30_000);
+      for (const ac of timeouts) ac.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+      const out = parse(await call);
+      expect(out.downloaded_count).toBe(2);
+      expect(out.failed_count).toBe(1);
+      expect(out.failed[0]).toMatchObject({ artwork_id: '300', reason: 'timed out after 30s' });
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('dry-run HEAD probes carry a deadline too (a stalled probe just drops its estimate)', async () => {
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    try {
+      mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
+        String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
+      const call = h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
+      await until(() => mockFetch.mock.calls.length === 3 && timeouts.length >= 3);
+      for (const ac of timeouts) ac.abort(new DOMException('timeout', 'TimeoutError'));
+      const out = parse(await call);
+      expect(out.preview).toBe(true);
+      expect(out.estimated_total_bytes).toBe(40_000);
+      for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit).signal).toBeInstanceOf(AbortSignal);
+    } finally {
+      await h.close();
+    }
+  });
+
+  it("the caller's cancellation aborts in-flight image GETs", async () => {
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    try {
+      const signals: AbortSignal[] = [];
+      mockFetch.mockImplementation(((_url: string, init?: RequestInit) => {
+        if (init?.signal) signals.push(init.signal);
+        return stalledFetch(init);
+      }) as never);
+      const ac = new AbortController();
+      const call = h.client.callTool(
+        { name: 'artsonia_download_artwork', arguments: { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true } },
+        { signal: ac.signal },
+      );
+      await until(() => mockFetch.mock.calls.length === 3);
+      ac.abort(new Error('user cancelled'));
+      await call.catch(() => undefined);
+      await until(() => signals.length === 3 && signals.every((s) => s.aborted));
+      // Cancelled — not timed out: the deadline timers never fired.
+      expect(timeouts.every((t) => !t.signal.aborted)).toBe(true);
+    } finally {
+      await h.close();
+    }
   });
 });
