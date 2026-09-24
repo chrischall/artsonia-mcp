@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/chrischall/artsonia-mcp/compare/v1.1.4...v1.2.0) (2026-09-24)
+
+
+### Features
+
+* confirm writes with a preview token instead of confirm: true ([#177](https://github.com/chrischall/artsonia-mcp/issues/177)) ([3dce7ff](https://github.com/chrischall/artsonia-mcp/commit/3dce7ff83d810b02b749995fb1095fe31813fb34))
+
 ## [1.1.4](https://github.com/chrischall/artsonia-mcp/compare/v1.1.3...v1.1.4) (2026-09-23)
 
 
