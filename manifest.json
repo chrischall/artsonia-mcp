@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "artsonia-mcp",
   "display_name": "Artsonia",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "description": "Artsonia student-art portfolios, comments, and fans for Claude — access via natural language",
   "author": {
     "name": "Chris Chall",
