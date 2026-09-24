@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { registerFeedbackTools } from '../../src/tools/feedback.js';
 import { client } from '../../src/client.js';
-import { createTestHarness } from '../helpers.js';
+import { callConfirmed, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach } from '../helpers.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,8 @@ const mockWrite = vi.spyOn(client, 'write').mockResolvedValue(OK as never);
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
 beforeEach(() => { mockFetchHtml.mockClear(); mockWrite.mockClear(); });
 afterAll(async () => { if (harness) await harness.close(); });
-const parse = (res: any) => JSON.parse(res.content[0].text);
+const parse = parseResult;
+restoreConfirmEnvAfterEach();
 
 describe('feedback tools', () => {
   it('setup + registers both tools', async () => {
@@ -33,17 +34,20 @@ describe('feedback tools', () => {
     expect(out.feedback[0].message).toBe('Looks ready to start next class.');
   });
 
-  it('mark_feedback_read without confirm is a dry run — no network call', async () => {
-    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141' }));
-    expect(out.preview).toBe(true);
+  it('mark_feedback_read phase 1 previews the mark-all POST and makes no network call', async () => {
+    const out = await phaseOne(harness, 'artsonia_mark_feedback_read', { artist_id: '13447141' });
+    expect(out.preview.wouldSend).toEqual({ path: '/members/feedback/default.asp?artist=13447141', ConfirmAsRead: 'Mark as Read' });
+    expect(out.preview.note).toMatch(/ALL/);
     expect(mockWrite).not.toHaveBeenCalled();
+    expect(mockFetchHtml).not.toHaveBeenCalled();
   });
 
-  it('mark_feedback_read with confirm posts ConfirmAsRead, then re-reads and reports verified when nothing is left unread', async () => {
+  it('mark_feedback_read phase 2 posts ConfirmAsRead once, then re-reads and reports verified when nothing is left unread', async () => {
     // The verifying re-read shows the previously-unread item now marked read.
     const allRead = feedback.replace(/This feedback has not been marked as read\./g, 'Read.');
     mockFetchHtml.mockResolvedValueOnce(allRead as never);
-    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141', confirm: true }));
+    const out = parse(await callConfirmed(harness, 'artsonia_mark_feedback_read', { artist_id: '13447141' }));
+    expect(mockWrite).toHaveBeenCalledTimes(1);
     expect(mockWrite).toHaveBeenCalledWith('/members/feedback/default.asp?artist=13447141', 'ConfirmAsRead=Mark+as+Read');
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=13447141'); // verifying re-read
     expect(out.verified).toBe(true);
@@ -51,9 +55,17 @@ describe('feedback tools', () => {
     expect(out.unread_remaining).toBe(0);
   });
 
+  it('mark_feedback_read refuses a token issued for a different student (no write)', async () => {
+    const { confirmToken } = await phaseOne(harness, 'artsonia_mark_feedback_read', { artist_id: '13447141' });
+    const res = await harness.callTool('artsonia_mark_feedback_read', { artist_id: '999', confirmToken });
+    expect(res.isError).toBe(true);
+    expect(parse(res).error).toBe('TOKEN_INVALID');
+    expect(mockWrite).not.toHaveBeenCalled();
+  });
+
   it('mark_feedback_read reports NOT verified when the re-read still shows unread feedback (302 did not persist)', async () => {
     mockFetchHtml.mockResolvedValueOnce(feedback as never); // re-read still has 1 unread
-    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141', confirm: true }));
+    const out = parse(await callConfirmed(harness, 'artsonia_mark_feedback_read', { artist_id: '13447141' }));
     expect(out.verified).toBe(false);
     expect(out.marked_read).toBe(false);
     expect(out.unread_remaining).toBe(1);

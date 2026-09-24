@@ -1,5 +1,14 @@
 # artsonia-mcp Implementation Plan
 
+> **Superseded (confirmation flow):** this plan was written for the original
+> `confirm: true` (`schemaConfirm`) convention, and its code and test snippets
+> still show it. The shipped server no longer has a `confirm` parameter: every
+> write goes through mcp-utils' `requireConfirmationWithFallback` +
+> `confirmationFromEnv` — an elicitation prompt where the client supports one,
+> otherwise a first call that returns a preview plus a single-use `confirmToken`
+> and a repeat call with that token that performs the write (see
+> `MCP_CONFIRM_MODE` in the README). Treat the snippets below as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `artsonia-mcp`, an MCP server that logs into a parent/fan's Artsonia account with a username/password and exposes read tools (students, portfolio, artwork, comments, fans, activity) plus three confirm-gated write tools (post comment, invite fan, set notifications).

@@ -1,7 +1,18 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { join, basename, dirname, relative } from 'node:path';
-import { NumericIdString, expandPath, mapWithConcurrency, messageOf, minifiedResult, schemaConfirm, toolAnnotations, withAmbientCancellation } from '@chrischall/mcp-utils';
+import {
+  NumericIdString,
+  confirmTokenParam,
+  confirmationFromEnv,
+  expandPath,
+  mapWithConcurrency,
+  messageOf,
+  minifiedResult,
+  requireConfirmationWithFallback,
+  toolAnnotations,
+  withAmbientCancellation,
+} from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
 
@@ -181,7 +192,7 @@ export function registerDownloadTools(
     {
       title: "Download a student's artwork images",
       description:
-        "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Without confirm:true this is a DRY RUN that lists the resolved filenames with estimated bytes and writes nothing. write_metadata:true also saves each artwork's comments + teacher feedback as a .json sidecar next to its image. embed_metadata:true embeds title/project/grade/date into each JPEG's EXIF/IPTC. path_template (e.g. \"{grade}/{project}\" or \"{school_year}\") organizes downloads into subfolders for multi-year archives. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
+        "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview (the resolved filenames with estimated bytes; nothing is written) and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE). write_metadata:true also saves each artwork's comments + teacher feedback as a .json sidecar next to its image. embed_metadata:true embeds title/project/grade/date into each JPEG's EXIF/IPTC. path_template (e.g. \"{grade}/{project}\" or \"{school_year}\") organizes downloads into subfolders for multi-year archives. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
@@ -198,34 +209,23 @@ export function registerDownloadTools(
         write_metadata: z.boolean().default(false).describe("After downloading, write a per-artwork <image-name>.json sidecar next to each image with the artwork's comments and teacher feedback (plus title/project/grade). Fetches each artwork's detail page + the student's feedback page. Off by default."),
         embed_metadata: z.boolean().default(false).describe("Embed each image's title/project/grade and source date (its Last-Modified, same as date_source) into the JPEG's EXIF (ImageDescription, DateTimeOriginal) and IPTC (title, keywords, date) so the metadata survives renames/moves and is searchable in Spotlight/Apple Photos. Needs each artwork's detail page (slower); applies to freshly downloaded files only (skipped files are left untouched). Off by default."),
         include_private: z.boolean().default(true).describe('Include artworks marked private in the portfolio. Set false to exclude them (excluded count is reported as private_excluded_count).'),
-        confirm: schemaConfirm,
+        confirmToken: confirmTokenParam,
       }),
     },
-    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, path_template, set_mtime_from_source, skip_existing, write_index, write_metadata, embed_metadata, include_private, confirm }) => {
+    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, path_template, set_mtime_from_source, skip_existing, write_index, write_metadata, embed_metadata, include_private, confirmToken }, ctx) => {
       const template = filename_template;
       const templates = `${template}\n${path_template ?? ''}`;
       // {date}/{school_year} anywhere in the name or path → the target path is
       // only known once the image's Last-Modified has been read.
       const deferredNaming = /\{(date|school_year)\}/.test(templates);
-      // One IO PER INVOCATION, not one shared across calls: a filesystem-free
-      // IO buffers image bytes and `extraContent()` drains them on read, so a
-      // shared instance would replay this call's images into the next one's
-      // result (and let concurrent calls drain each other).
-      const io = makeIO();
-      // write_metadata needs each artwork's detail page anyway (for its comments)
-      // and embed_metadata needs title/project/grade for the EXIF/IPTC fields, so
-      // both ride the same up-front detail fetch as descriptive names — but only
-      // on confirmed runs: previews don't use that data, so dry-run keeps the
-      // {artwork_id} fast path (review on #30).
-      // write_metadata only earns a detail fetch where its sidecars can actually
-      // be written (io.persistsFiles); on the inline IO they're dropped,
-      // so skip the fetch. embed_metadata still needs detail (it embeds into the
-      // returned image bytes, which works on either IO).
-      const needDetail =
-        project !== undefined ||
-        grade !== undefined ||
-        /\{(title|project|grade)\}/.test(templates) ||
-        (((write_metadata && io.persistsFiles) || embed_metadata) && confirm === true);
+      // Detail pages needed to NAME or FILTER the items. These decide what gets
+      // downloaded, so they are read before the confirmation (and bound into it).
+      // The metadata-only detail (write_metadata's comments, embed_metadata's
+      // EXIF fields) changes nothing about WHICH files are written, so it is
+      // fetched only after the confirmation — a preview keeps the {artwork_id}
+      // fast path (review on #30).
+      const needDetail = project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(templates);
+      const destDir = expandPath(dest);
 
       /** Full target path for an item (subfolders from path_template + filename). */
       const fileOf = (it: Item, date: string): string => {
@@ -234,7 +234,22 @@ export function registerDownloadTools(
         return join(destDir, ...segments, buildFilename(template, fields, it.artwork_id));
       };
 
-      // 1. Portfolio → artwork ids (newest-first) + private flags.
+      /** Detail-page fields for one artwork (comments only when write_metadata wants them). */
+      const detailOf = async (t: { artwork_id: string; is_private: boolean }): Promise<Item> => {
+        const d = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${t.artwork_id}`));
+        return {
+          artwork_id: t.artwork_id,
+          is_private: t.is_private,
+          title: d.title,
+          project: d.project,
+          grade: d.grade,
+          ...(write_metadata ? { comments: d.comments } : {}),
+        };
+      };
+
+      // 1. Portfolio → artwork ids (newest-first) + private flags. Read on EVERY
+      // call — preview and confirmed alike — so a portfolio that changed between
+      // the two is refused rather than downloaded unseen.
       const allTiles = parsePortfolio(await client.fetchHtml(`/artists/portfolio.asp?id=${artist_id}`));
       const tiles = include_private ? allTiles : allTiles.filter((t) => !t.is_private);
       const privateExcluded = allTiles.length - tiles.length;
@@ -247,17 +262,7 @@ export function registerDownloadTools(
         // fetch the whole portfolio just to throw most of it away.
         const tilesToDetail =
           limit !== undefined && project === undefined && grade === undefined ? tiles.slice(0, limit) : tiles;
-        const detailed = await mapWithConcurrency(tilesToDetail, FETCH_CONCURRENCY, async (t): Promise<Item> => {
-          const d = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${t.artwork_id}`));
-          return {
-            artwork_id: t.artwork_id,
-            is_private: t.is_private,
-            title: d.title,
-            project: d.project,
-            grade: d.grade,
-            ...(write_metadata ? { comments: d.comments } : {}),
-          };
-        });
+        const detailed = await mapWithConcurrency(tilesToDetail, FETCH_CONCURRENCY, detailOf);
         items = detailed.filter(
           (it) =>
             (project === undefined || (it.project ?? '').toLowerCase().includes(project.toLowerCase())) &&
@@ -268,45 +273,101 @@ export function registerDownloadTools(
       // 3. Most-recent-N (no-op when already capped above; still needed for the filtered path).
       if (limit !== undefined) items = items.slice(0, limit);
 
-      const destDir = expandPath(dest);
       const privateCount = items.filter((it) => it.is_private).length;
+      const filenameOf = (it: Item) =>
+        deferredNaming ? '(finalized from the image date at download)' : relative(destDir, fileOf(it, ''));
+      const plan = {
+        count: items.length,
+        private_count: privateCount,
+        ...(privateExcluded > 0 ? { private_excluded_count: privateExcluded } : {}),
+        dest: destDir,
+        resolution,
+        filename_template: template,
+        ...(path_template !== undefined ? { path_template } : {}),
+      };
 
-      // 4. Dry run — show resolved filenames (date-token names finalize at download
-      // time) and estimated sizes. Sizes come from HEAD probes of the public image
-      // CDN — read-only, never a body download, and a probe failure just leaves the
-      // estimate out rather than failing the preview.
-      if (confirm !== true) {
-        const estimates = new Map<string, number>();
-        await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it) => {
-          try {
-            const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD', signal: imageFetchSignal() });
-            const len = Number(res.headers.get('content-length'));
-            if (res.ok && Number.isFinite(len) && len > 0) estimates.set(it.artwork_id, len);
-          } catch {
-            /* estimate unavailable — preview must still succeed */
-          }
-        });
-        const estimatedTotal = [...estimates.values()].reduce((a, b) => a + b, 0);
-        return minifiedResult({
-          preview: true,
-          action: 'download_artwork',
-          note: `DRY RUN — would download ${items.length} image(s) at "${resolution}" resolution to ${destDir}. Re-run with confirm: true to download.`,
-          count: items.length,
-          private_count: privateCount,
-          ...(privateExcluded > 0 ? { private_excluded_count: privateExcluded } : {}),
-          ...(estimates.size > 0 ? { estimated_total_bytes: estimatedTotal } : {}),
-          dest: destDir,
-          resolution,
-          filename_template: template,
-          ...(path_template !== undefined ? { path_template } : {}),
-          artworks: items.slice(0, 200).map((it) => ({
-            artwork_id: it.artwork_id,
-            is_private: it.is_private,
-            ...(it.title !== undefined ? { title: it.title } : {}),
-            ...(estimates.has(it.artwork_id) ? { estimated_bytes: estimates.get(it.artwork_id) } : {}),
-            filename: deferredNaming ? '(finalized from the image date at download)' : relative(destDir, fileOf(it, '')),
-          })),
-        });
+      // 4. Confirmation. Where the client can prompt, the prompt shows the
+      // resolved plan. Otherwise the first call returns the preview — resolved
+      // filenames plus estimated sizes — and a token bound to exactly these
+      // artworks and options; only a repeat call carrying it downloads.
+      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+        action: 'artsonia.download_artwork',
+        message: `Review and confirm downloading ${items.length} image(s) to ${destDir}:`,
+        details: {
+          ...plan,
+          artworks: items.slice(0, 200).map((it) => ({ artwork_id: it.artwork_id, filename: filenameOf(it) })),
+        },
+        tool: 'artsonia_download_artwork',
+        confirmToken,
+        subject: async () => {
+          // Sizes come from HEAD probes of the public image CDN — read-only, never a
+          // body download, and a probe failure just leaves the estimate out rather
+          // than failing the preview.
+          const estimates = new Map<string, number>();
+          await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it) => {
+            try {
+              const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD', signal: imageFetchSignal() });
+              const len = Number(res.headers.get('content-length'));
+              if (res.ok && Number.isFinite(len) && len > 0) estimates.set(it.artwork_id, len);
+            } catch {
+              /* estimate unavailable — preview must still succeed */
+            }
+          });
+          const estimatedTotal = [...estimates.values()].reduce((a, b) => a + b, 0);
+          return {
+            target: artist_id,
+            // Exactly what the confirmed run will write: which artworks, where,
+            // under which names, at which resolution, and with which extras.
+            payload: {
+              artist_id,
+              dest: destDir,
+              resolution,
+              filename_template: template,
+              path_template,
+              set_mtime_from_source,
+              skip_existing,
+              write_index,
+              write_metadata,
+              embed_metadata,
+              include_private,
+              artworks: items.map((it) => ({
+                artwork_id: it.artwork_id,
+                is_private: it.is_private,
+                title: it.title,
+                project: it.project,
+                grade: it.grade,
+              })),
+            },
+            preview: {
+              note: `Would download ${items.length} image(s) at "${resolution}" resolution to ${destDir}. Nothing has been written yet.`,
+              ...plan,
+              ...(estimates.size > 0 ? { estimated_total_bytes: estimatedTotal } : {}),
+              artworks: items.slice(0, 200).map((it) => ({
+                artwork_id: it.artwork_id,
+                is_private: it.is_private,
+                ...(it.title !== undefined ? { title: it.title } : {}),
+                ...(estimates.has(it.artwork_id) ? { estimated_bytes: estimates.get(it.artwork_id) } : {}),
+                filename: filenameOf(it),
+              })),
+            },
+          };
+        },
+      }));
+      if (gate) return gate;
+
+      // One IO PER INVOCATION, not one shared across calls: a filesystem-free
+      // IO buffers image bytes and `extraContent()` drains them on read, so a
+      // shared instance would replay this call's images into the next one's
+      // result (and let concurrent calls drain each other).
+      const io = makeIO();
+
+      // write_metadata only earns a detail fetch where its sidecars can actually
+      // be written (io.persistsFiles); on the inline IO they're dropped, so skip
+      // the fetch. embed_metadata still needs detail (it embeds into the returned
+      // image bytes, which works on either IO). Items already detailed above
+      // (naming/filtering) carry it.
+      if (!needDetail && ((write_metadata && io.persistsFiles) || embed_metadata)) {
+        items = await mapWithConcurrency(items, FETCH_CONCURRENCY, detailOf);
       }
 
       // 5. Download (bounded concurrency).

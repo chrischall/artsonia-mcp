@@ -3,7 +3,7 @@ import { registerDownloadTools } from '../../src/tools/download.js';
 import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { client } from '../../src/client.js';
-import { createTestHarness } from '../helpers.js';
+import { ACCEPT, createTestHarness } from '../helpers.js';
 
 // The base64 of a buffer, for asserting image blocks carry the right bytes.
 const b64 = (s: string) => Buffer.from(s).toString('base64');
@@ -96,15 +96,15 @@ describe('artsonia_download_artwork on the inline IO', () => {
 
   it('does not leak a prior invocation\'s images into a later result (drain-on-read)', async () => {
     const io = new InlineDownloadIO();
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io), ACCEPT);
     const first = await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
+      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}',
     });
     expect(imageBlocks(first)).toHaveLength(2);
     // Second call downloads only 1 → its result must carry exactly 1 image block,
     // NOT 3 (the 2 leaked from the first call + its own).
     const second = await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1, confirm: true,
+      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1,
     });
     expect(imageBlocks(second)).toHaveLength(1);
     await harness.close();
@@ -112,10 +112,10 @@ describe('artsonia_download_artwork on the inline IO', () => {
 
   it('omits index_file / metadata_count on the inline path (those files are never persisted)', async () => {
     const io = new InlineDownloadIO();
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io), ACCEPT);
     const res = await harness.callTool('artsonia_download_artwork', {
       artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}',
-      write_index: true, write_metadata: true, confirm: true,
+      write_index: true, write_metadata: true,
     });
     const out = summary(res);
     expect(out.downloaded_count).toBe(2);
@@ -133,13 +133,14 @@ describe('artsonia_download_artwork on the inline IO', () => {
         built.push(io);
         return io;
       }),
+      ACCEPT,
     );
     const [a, b] = await Promise.all([
       harness.callTool('artsonia_download_artwork', {
-        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
+        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}',
       }),
       harness.callTool('artsonia_download_artwork', {
-        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1, confirm: true,
+        artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1,
       }),
     ]);
     expect(built).toHaveLength(2);
@@ -152,9 +153,9 @@ describe('artsonia_download_artwork on the inline IO', () => {
   it('omits dest and per-item file paths when nothing was written to disk', async () => {
     // Reporting a path the caller cannot reach reads as "your files are there".
     const io = new InlineDownloadIO();
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io));
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => io), ACCEPT);
     const res = await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', confirm: true,
+      artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}',
     });
     const out = summary(res);
     expect(out.dest).toBeUndefined();
