@@ -85,6 +85,43 @@ describe('ArtsoniaClient.fetchHtml', () => {
     expect(t.calls.some((c) => c.path === '/members/login.asp')).toBe(false);
   });
 
+  it('does NOT treat login-page prose inside user content as an expired session (no re-login, no false credential error)', async () => {
+    // A fan comment / artwork title can contain the login page's own phrases.
+    // The page itself is the real (authed) artwork page — only the final URL /
+    // a login Location / the actual login FORM mean the session expired.
+    const hostile = '<html><div class="comment">You need to log in to see the rest! Parent (or Fan) Login here</div></html>';
+    const t = scriptedTransport([
+      loginOk,
+      () => ({ status: 200, body: hostile, url: 'https://www.artsonia.com/museum/art.asp?id=1', setCookie: [] }),
+    ]);
+    const html = await makeClient(t).fetchHtml('/museum/art.asp?id=1');
+    expect(html).toBe(hostile);
+    expect(t.calls.filter((c) => c.path === '/members/login.asp').length).toBe(1);
+  });
+
+  it('fetchproxy mode does not report "not signed in" for login-page prose inside user content', async () => {
+    const hostile = '<html><p>You need to log in</p></html>';
+    const t = scriptedTransport([
+      () => ({ status: 200, body: hostile, url: 'https://www.artsonia.com/museum/art.asp?id=1', setCookie: [] }),
+    ]) as ArtsoniaTransport & { calls: ArtsoniaRequest[]; usesBrowserSession?: boolean };
+    t.usesBrowserSession = true;
+    const client = new ArtsoniaClient({ transport: t, auth: new AuthManager(t, {}) });
+    await expect(client.fetchHtml('/museum/art.asp?id=1')).resolves.toBe(hostile);
+  });
+
+  it('still re-logs-in when the login FORM is rendered in place at the requested URL', async () => {
+    const loginForm = '<form method="post" action="/members/login.asp"><input type="text" name="Username"><input type="password" name="Password"></form>';
+    const t = scriptedTransport([
+      loginOk,
+      () => ({ status: 200, body: loginForm, url: 'https://www.artsonia.com/members/', setCookie: [] }),
+      loginOk,
+      () => ({ status: 200, body: '<html>dash</html>', url: 'https://www.artsonia.com/members/', setCookie: [] }),
+    ]);
+    const html = await makeClient(t).fetchHtml('/members/');
+    expect(html).toContain('dash');
+    expect(t.calls.filter((c) => c.path === '/members/login.asp').length).toBe(2);
+  });
+
   it('write() triggers re-login and retries when first response is 302 to login via Location header', async () => {
     // Simulates a mid-write session expiry: the POST returns 302 with Location: /members/login.asp
     // and empty body, url = the original request path (not the login URL), so only the Location

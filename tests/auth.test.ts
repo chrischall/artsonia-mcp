@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AuthManager } from '../src/auth.js';
+import { AuthManager, looksUnauthenticated } from '../src/auth.js';
 import type { ArtsoniaRequest, ArtsoniaResponse, ArtsoniaTransport } from '../src/transport.js';
 
 function fakeTransport(handler: (req: ArtsoniaRequest) => ArtsoniaResponse): ArtsoniaTransport & { calls: ArtsoniaRequest[] } {
@@ -203,5 +203,22 @@ describe('AuthManager — an expired session clears the cache', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('looksUnauthenticated', () => {
+  const at = (url: string, body: string, location?: string): ArtsoniaResponse => ({ status: 200, body, url, setCookie: [], location });
+  it('matches the login URL and a login Location', () => {
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/login.asp', ''))).toBe(true);
+    expect(looksUnauthenticated({ ...at('https://www.artsonia.com/x', ''), status: 302, location: '/members/login.asp' })).toBe(true);
+  });
+  it('ignores login-page prose appearing in user-generated content', () => {
+    expect(looksUnauthenticated(at('https://www.artsonia.com/museum/art.asp?id=1', '<p>You need to log in</p><p>Parent (or Fan) Login</p>'))).toBe(false);
+  });
+  it('ignores password fields on non-login forms (profile page)', () => {
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/profile.asp', '<form action="profile.asp"><input type="password" name="OldPassword"></form>'))).toBe(false);
+  });
+  it('matches the login form structure rendered in place', () => {
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/', '<FORM method=post action="login.asp"><input name="Username"><input type=password name=Password></FORM>'))).toBe(true);
   });
 });
