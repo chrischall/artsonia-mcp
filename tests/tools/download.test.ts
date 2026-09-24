@@ -3,7 +3,9 @@ import * as piexif from 'piexif-ts';
 import { registerDownloadTools, buildFilename, buildRelPath } from '../../src/tools/download.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { client } from '../../src/client.js';
-import { createTestHarness } from '../helpers.js';
+import {
+  ACCEPT, DECLINE, callConfirmed, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach,
+} from '../helpers.js';
 import { tinyJpeg, parseIptc } from '../jpeg-fixture.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -69,7 +71,10 @@ function imageResponse(lastModified = LASTMOD) {
   });
 }
 
+// `harness` cannot be prompted, so a call without a token stops at the preview;
+// `confirmed` can, and accepts — the stand-in for an approved download.
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
+let confirmed: Awaited<ReturnType<typeof createTestHarness>>;
 let dir: string;
 beforeEach(() => {
   mockFetchHtml.mockReset();
@@ -79,8 +84,15 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'artsonia-dl-'));
 });
 afterEach(() => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort */ } });
-afterAll(async () => { if (harness) await harness.close(); });
-const parse = (res: any) => JSON.parse(res.content[0].text);
+afterAll(async () => {
+  if (harness) await harness.close();
+  if (confirmed) await confirmed.close();
+});
+const parse = parseResult;
+restoreConfirmEnvAfterEach();
+/** Phase 1 on the harness that cannot prompt: the preview the user would approve. */
+const preview = async (args: Record<string, unknown>) =>
+  (await phaseOne(harness, 'artsonia_download_artwork', args)).preview;
 
 describe('buildFilename', () => {
   it('default template → grade/project/title with auto-appended id, slugified', () => {
@@ -134,12 +146,65 @@ describe('buildRelPath', () => {
 describe('artsonia_download_artwork', () => {
   it('setup + registers the tool', async () => {
     harness = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    confirmed = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
     expect((await harness.listTools()).map((t) => t.name)).toContain('artsonia_download_artwork');
   });
 
-  it('dry run resolves descriptive filenames and writes nothing (only HEAD size probes, no GETs)', async () => {
+  it('takes confirmToken and no confirm parameter', async () => {
+    const { tools } = await harness.client.listTools();
+    const props = Object.keys(tools[0].inputSchema.properties ?? {});
+    expect(props).toContain('confirmToken');
+    expect(props).not.toContain('confirm');
+    expect(tools[0].description).toMatch(/confirmToken/);
+  });
+
+  it('phase 2 with the returned token downloads exactly once', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
+    const p1 = await phaseOne(harness, 'artsonia_download_artwork', args);
+    expect(readdirSync(dir)).toHaveLength(0);
+    for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit)?.method).toBe('HEAD');
+    mockFetch.mockClear();
+    const out = parse(await harness.callTool('artsonia_download_artwork', { ...args, confirmToken: p1.confirmToken }));
+    expect(out.downloaded_count).toBe(3);
+    expect(readdirSync(dir).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
+    const gets = mockFetch.mock.calls.filter(([, init]) => (init as RequestInit)?.method !== 'HEAD');
+    expect(gets).toHaveLength(3);
+  });
+
+  it('refuses the token when the portfolio changed between preview and confirmation (DRAFT_CHANGED), writing nothing', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
+    const { confirmToken } = await phaseOne(harness, 'artsonia_download_artwork', args);
+    // A new artwork appeared: what would now be downloaded is not what was approved.
+    const grown = PORTFOLIO.replace('<div class="grid">', '<div class="grid"><div class="grid-item"><div class="grid-item-art"><a href="/museum/art.asp?id=400"><div class="genthumb"></div></a></div></div>');
+    mockFetchHtml.mockImplementation(((p: string) => Promise.resolve(p.includes('portfolio.asp') ? grown : htmlByPath(p))) as never);
+    const res = await harness.callTool('artsonia_download_artwork', { ...args, confirmToken });
+    expect(res.isError).toBe(true);
+    const out = parse(res);
+    expect(out.error).toBe('DRAFT_CHANGED');
+    expect(out.preview.count).toBe(4);
+    expect(readdirSync(dir)).toHaveLength(0);
+  });
+
+  it('writes nothing when the confirmation prompt is declined', async () => {
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), DECLINE);
+    try {
+      const out = parse(await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      expect(out.confirmed).toBe(false);
+      expect(readdirSync(dir)).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    } finally { await h.close(); }
+  });
+
+  it('MCP_CONFIRM_MODE=refuse refuses on a client that cannot prompt, writing nothing', async () => {
+    process.env.MCP_CONFIRM_MODE = 'refuse';
     const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
-    expect(out.preview).toBe(true);
+    expect(out.reason).toBe('confirmation-unsupported');
+    expect(readdirSync(dir)).toHaveLength(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('preview (phase 1) resolves descriptive filenames and writes nothing (only HEAD size probes, no GETs)', async () => {
+    const out = await preview({ artist_id: '1', dest: dir });
     expect(out.count).toBe(3);
     expect(out.artworks[0]).toMatchObject({ artwork_id: '300', filename: 'Grade 6 - Silhouette - My silhouette (300).jpg' });
     // Size estimation may probe the public CDN, but only with HEAD — never a body download.
@@ -147,9 +212,8 @@ describe('artsonia_download_artwork', () => {
     expect(readdirSync(dir)).toHaveLength(0);
   });
 
-  it('dry run reports estimated bytes per item and in total, plus is_private', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir }));
-    expect(out.preview).toBe(true);
+  it('preview (phase 1) reports estimated bytes per item and in total, plus is_private', async () => {
+    const out = await preview({ artist_id: '2', dest: dir });
     expect(out.estimated_total_bytes).toBe(60_000);
     expect(out.artworks[0]).toMatchObject({ artwork_id: '300', is_private: true, estimated_bytes: 20_000 });
     expect(out.artworks[1]).toMatchObject({ artwork_id: '200', is_private: false, estimated_bytes: 20_000 });
@@ -157,17 +221,16 @@ describe('artsonia_download_artwork', () => {
     expect(readdirSync(dir)).toHaveLength(0);
   });
 
-  it('dry run estimates degrade gracefully when the HEAD probe fails', async () => {
+  it('preview (phase 1) estimates degrade gracefully when the HEAD probe fails', async () => {
     mockFetch.mockImplementation(() => Promise.reject(new Error('network down')));
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
-    expect(out.preview).toBe(true);
+    const out = await preview({ artist_id: '1', dest: dir });
     expect(out.count).toBe(3);
     expect(out.estimated_total_bytes).toBeUndefined();
     expect(out.artworks[0].estimated_bytes).toBeUndefined();
   });
 
   it('downloads with title-based names and sets mtime from Last-Modified', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
     expect(out.downloaded_count).toBe(3);
     expect(readdirSync(dir).sort()).toEqual([
       'Grade 5 - Warmup - Untitled (100).jpg',
@@ -182,39 +245,40 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('id-only template is the fast path (no detail fetch); mtime is download-time when disabled', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', set_mtime_from_source: false, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', set_mtime_from_source: false,
     }));
     expect(out.downloaded_count).toBe(3);
     expect(readdirSync(dir).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
     // Portfolio + the /members/ count-check page only — no per-artwork detail.
-    expect(mockFetchHtml).toHaveBeenCalledTimes(2);
+    // (Distinct pages: the prompted client re-runs the call once to deliver its
+    // answer, and the portfolio is re-read on that pass by design.)
+    expect(new Set(mockFetchHtml.mock.calls.map((c) => c[0]))).toEqual(new Set(['/artists/portfolio.asp?id=1', '/members/']));
     expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
     expect(out.downloaded[0].date_source).toBe('download-time');
     expect(statSync(join(dir, '300.jpg')).mtime.getUTCFullYear()).not.toBe(2022);
   });
 
-  it('write_metadata does not break the id-only fast path in dry-run (comments unused in previews)', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
+  it('write_metadata does not break the id-only fast path in the preview (comments unused in previews)', async () => {
+    await preview({
       artist_id: '1', dest: dir, filename_template: '{artwork_id}', write_metadata: true,
-    }));
-    expect(out.preview).toBe(true);
+    });
     // Portfolio only — the preview discards comments, so no per-artwork detail.
     expect(mockFetchHtml).toHaveBeenCalledTimes(1);
     expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
   });
 
   it('skip_existing makes a re-run a no-op (no image re-fetch)', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir });
     const callsAfterFirst = mockFetch.mock.calls.length;
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
     expect(out.skipped_count).toBe(3);
     expect(out.downloaded_count).toBe(0);
     expect(mockFetch.mock.calls.length).toBe(callsAfterFirst); // no new image fetches
   });
 
   it('grade filter keeps only the matching grade', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, grade: 'Grade 6', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, grade: 'Grade 6' }));
     expect(out.downloaded_count).toBe(2);
     expect(readdirSync(dir).sort()).toEqual([
       'Grade 6 - Clay - Clay pot (200).jpg',
@@ -223,22 +287,23 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('project filter keeps only matches', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, project: 'clay', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, project: 'clay' }));
     expect(out.downloaded_count).toBe(1);
     expect(readdirSync(dir)).toEqual(['Grade 6 - Clay - Clay pot (200).jpg']);
   });
 
   it('most-recent-N keeps the newest N', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 2, filename_template: '{artwork_id}', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 2, filename_template: '{artwork_id}' }));
     expect(out.downloaded_count).toBe(2);
     expect(readdirSync(dir).sort()).toEqual(['200.jpg', '300.jpg']);
   });
 
   it('limit + default template only fetches detail for the newest N (no whole-portfolio scan)', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 2, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 2 }));
     expect(out.downloaded_count).toBe(2);
-    // portfolio (1) + detail for the 2 newest only = 3 fetches, NOT 4 (id 100 never fetched).
-    expect(mockFetchHtml).toHaveBeenCalledTimes(3);
+    // portfolio + detail for the 2 newest only = 3 distinct pages, NOT 4 (id 100 never fetched).
+    // (Distinct: the prompted client's answer re-runs the call, re-reading them once.)
+    expect(new Set(mockFetchHtml.mock.calls.map((c) => c[0])).size).toBe(3);
     expect(mockFetchHtml).not.toHaveBeenCalledWith('/museum/art.asp?id=100');
     expect(readdirSync(dir).sort()).toEqual([
       'Grade 6 - Clay - Clay pot (200).jpg',
@@ -248,7 +313,7 @@ describe('artsonia_download_artwork', () => {
 
   it('a malformed Last-Modified header falls back to download-time, not failure', async () => {
     mockFetch.mockImplementation(() => Promise.resolve(imageResponse('not-a-real-date')));
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
     expect(out.downloaded_count).toBe(3);
     expect(out.failed_count).toBe(0);
     expect(out.downloaded[0].date_source).toBe('download-time');
@@ -257,26 +322,26 @@ describe('artsonia_download_artwork', () => {
   it('reports failed downloads without throwing', async () => {
     mockFetch.mockImplementation((url: any) =>
       Promise.resolve(String(url).includes('/300.jpg') ? new Response('nope', { status: 404 }) : imageResponse()));
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
     expect(out.downloaded_count).toBe(2);
     expect(out.failed_count).toBe(1);
     expect(out.failed[0]).toMatchObject({ artwork_id: '300', reason: 'HTTP 404' });
   });
 
   it('resolution flows through to the CDN url', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 1, resolution: 'large', filename_template: '{artwork_id}', confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, limit: 1, resolution: 'large', filename_template: '{artwork_id}' });
     expect(mockFetch).toHaveBeenCalledWith('https://images.artsonia.com/art/large/300.jpg', expect.anything());
   });
 
   it('without write_index, no manifest is written and result has no index_file', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
     expect(out.downloaded_count).toBe(3);
     expect(readdirSync(dir)).not.toContain('index.json');
     expect(out.index_file).toBeUndefined();
   });
 
   it('write_index writes index.json listing the downloaded items and reports its path', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, write_index: true, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, write_index: true }));
     expect(out.downloaded_count).toBe(3);
     const indexPath = join(dir, 'index.json');
     expect(out.index_file).toBe(indexPath);
@@ -296,12 +361,12 @@ describe('artsonia_download_artwork', () => {
 
   it('write_index still writes a manifest (of on-disk items) when everything is skipped on a re-run', async () => {
     // First run downloads everything.
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir });
     // Re-run with skip_existing + write_index: nothing downloads, but the
     // manifest must still be written (no silent absence) and list what's there.
     const out = parse(
-      await harness.callTool('artsonia_download_artwork', {
-        artist_id: '1', dest: dir, skip_existing: true, write_index: true, confirm: true,
+      await confirmed.callTool('artsonia_download_artwork', {
+        artist_id: '1', dest: dir, skip_existing: true, write_index: true,
       }),
     );
     expect(out.downloaded_count).toBe(0);
@@ -316,7 +381,7 @@ describe('artsonia_download_artwork', () => {
   // --- richer result: totals + is_private (issue #15) ---
 
   it('result reports total_bytes and per-file is_private', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}', confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}' }));
     expect(out.downloaded_count).toBe(3);
     expect(out.total_bytes).toBe(60_000);
     expect(out.private_count).toBe(1);
@@ -325,16 +390,16 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('skipped entries also carry is_private', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}', confirm: true });
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}', confirm: true }));
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}' });
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '2', dest: dir, filename_template: '{artwork_id}' }));
     expect(out.skipped_count).toBe(3);
     expect(out.total_bytes).toBe(0);
     expect(out.skipped.find((s: any) => s.artwork_id === '300').is_private).toBe(true);
   });
 
   it('include_private:false excludes private pieces and reports how many were dropped', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '2', dest: dir, filename_template: '{artwork_id}', include_private: false, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '2', dest: dir, filename_template: '{artwork_id}', include_private: false,
     }));
     expect(out.downloaded_count).toBe(2);
     expect(readdirSync(dir).sort()).toEqual(['100.jpg', '200.jpg']);
@@ -345,8 +410,8 @@ describe('artsonia_download_artwork', () => {
   // --- post-run artwork_count sanity check (issue #15) ---
 
   it('warns when downloaded+skipped does not match the student artwork_count', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '16011097', dest: dir, filename_template: '{artwork_id}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '16011097', dest: dir, filename_template: '{artwork_id}',
     }));
     expect(out.downloaded_count).toBe(3);
     expect(out.count_check).toEqual({ expected: 46, on_disk: 3, ok: false });
@@ -356,16 +421,16 @@ describe('artsonia_download_artwork', () => {
   it('count check passes silently when the counts match', async () => {
     mockFetchHtml.mockImplementation(((p: string) =>
       Promise.resolve(p === '/members/' ? MEMBERS_MATCHING : htmlByPath(p))) as never);
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}',
     }));
     expect(out.count_check).toEqual({ expected: 3, on_disk: 3, ok: true });
     expect(out.warning).toBeUndefined();
   });
 
   it('count check is skipped when the run is filtered (limit/project/grade/include_private)', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '16011097', dest: dir, limit: 2, filename_template: '{artwork_id}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '16011097', dest: dir, limit: 2, filename_template: '{artwork_id}',
     }));
     expect(out.count_check).toBeUndefined();
     expect(out.warning).toBeUndefined();
@@ -375,8 +440,8 @@ describe('artsonia_download_artwork', () => {
   it('a failing count-check read never fails the download', async () => {
     mockFetchHtml.mockImplementation(((p: string) =>
       p === '/members/' ? Promise.reject(new Error('boom')) : Promise.resolve(htmlByPath(p))) as never);
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}',
     }));
     expect(out.downloaded_count).toBe(3);
     expect(out.count_check).toBeUndefined();
@@ -385,12 +450,12 @@ describe('artsonia_download_artwork', () => {
   // --- write_metadata sidecars: comments + teacher feedback (issue #12) ---
 
   it('without write_metadata, no sidecar .json files are written (default behavior preserved)', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir });
     expect(readdirSync(dir).filter((f) => f.endsWith('.json'))).toHaveLength(0);
   });
 
   it('write_metadata writes a per-artwork sidecar with comments and teacher feedback', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, write_metadata: true, confirm: true }));
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, write_metadata: true }));
     expect(out.downloaded_count).toBe(3);
     expect(out.metadata_count).toBe(3);
     // The teacher-feedback page was fetched once via the client (reuses artsonia_get_feedback's source).
@@ -412,9 +477,9 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('write_metadata works on the id-only template (fetches detail for the sidecars) and on skipped re-runs', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true });
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', write_metadata: true, confirm: true,
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', write_metadata: true,
     }));
     expect(out.skipped_count).toBe(3);
     expect(out.metadata_count).toBe(3); // sidecars written for already-present images too
@@ -425,13 +490,13 @@ describe('artsonia_download_artwork', () => {
   // --- path_template: folder layouts for multi-year archives (issue #14) ---
 
   it('without path_template the layout stays flat (default behavior preserved)', async () => {
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir });
     expect(readdirSync(dir, { withFileTypes: true }).every((e) => e.isFile())).toBe(true);
   });
 
   it('path_template lays files out into nested folders composed with filename_template', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}',
     }));
     expect(out.downloaded_count).toBe(3);
     expect(readdirSync(join(dir, 'Grade 6', 'Silhouette'))).toEqual(['My silhouette (300).jpg']);
@@ -440,8 +505,8 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('path_template {school_year} folders derive from the image Last-Modified', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{school_year}', filename_template: '{artwork_id}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{school_year}', filename_template: '{artwork_id}',
     }));
     expect(out.downloaded_count).toBe(3);
     // LASTMOD is 2022-03-18 → school year 2021-2022.
@@ -449,30 +514,29 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('path_template re-runs are idempotent: skip_existing skips across template paths (no re-fetch)', async () => {
-    await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', confirm: true,
+    await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}',
     });
     const callsAfterFirst = mockFetch.mock.calls.length;
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}',
     }));
     expect(out.skipped_count).toBe(3);
     expect(out.downloaded_count).toBe(0);
     expect(mockFetch.mock.calls.length).toBe(callsAfterFirst); // no new image fetches
   });
 
-  it('dry run with path_template previews the folder-relative paths and writes nothing', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
+  it('preview (phase 1) with path_template previews the folder-relative paths and writes nothing', async () => {
+    const out = await preview({
       artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}',
-    }));
-    expect(out.preview).toBe(true);
+    });
     expect(out.artworks[0]).toMatchObject({ artwork_id: '300', filename: 'Grade 6/Silhouette/My silhouette (300).jpg' });
     expect(readdirSync(dir)).toHaveLength(0);
   });
 
   it('write_index with path_template records folder-relative file paths', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_index: true, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_index: true,
     }));
     expect(out.downloaded_count).toBe(3);
     const manifest = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
@@ -481,8 +545,8 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('write_metadata sidecars land next to their images inside template folders', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_metadata: true, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_metadata: true,
     }));
     expect(out.metadata_count).toBe(3);
     const sidecar = JSON.parse(readFileSync(join(dir, 'Grade 6', 'Silhouette', 'Grade 6 - Silhouette - My silhouette (300).json'), 'utf8'));
@@ -496,7 +560,7 @@ describe('artsonia_download_artwork', () => {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));
-    await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, confirm: true });
+    await confirmed.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir });
     const written = readFileSync(join(dir, 'Grade 6 - Silhouette - My silhouette (300).jpg'));
     expect(written.equals(tinyJpeg())).toBe(true);
   });
@@ -506,8 +570,8 @@ describe('artsonia_download_artwork', () => {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, embed_metadata: true, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, embed_metadata: true,
     }));
     expect(out.downloaded_count).toBe(3);
     expect(out.embedded_count).toBe(3);
@@ -525,8 +589,8 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('embed_metadata failure (non-JPEG payload) degrades gracefully: original bytes written, run not failed', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, embed_metadata: true, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, embed_metadata: true,
     }));
     // The default mock returns 20k zero bytes — not a JPEG — so embedding fails per-file.
     expect(out.downloaded_count).toBe(3);
@@ -536,11 +600,10 @@ describe('artsonia_download_artwork', () => {
     expect(written.equals(Buffer.alloc(20_000))).toBe(true);
   });
 
-  it('embed_metadata keeps the id-only fast path in dry-run (detail only fetched on confirmed runs)', async () => {
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
+  it('embed_metadata keeps the id-only fast path in the preview (detail only fetched on confirmed runs)', async () => {
+    await preview({
       artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true,
-    }));
-    expect(out.preview).toBe(true);
+    });
     expect(mockFetchHtml).toHaveBeenCalledTimes(1); // portfolio only
     expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
   });
@@ -550,8 +613,8 @@ describe('artsonia_download_artwork', () => {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
     })));
-    const out = parse(await harness.callTool('artsonia_download_artwork', {
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true, confirm: true,
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', {
+      artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true,
     }));
     expect(out.embedded_count).toBe(3);
     const exif = piexif.load(readFileSync(join(dir, '300.jpg')).toString('latin1'));
@@ -591,12 +654,12 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
   afterEach(() => { timeoutSpy.mockRestore(); });
 
   it('a stalled image GET times out into a per-item failure; the rest still download', async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
     try {
       mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
         String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
       const call = h.callTool('artsonia_download_artwork', {
-        artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true,
+        artist_id: '1', dest: dir, filename_template: '{artwork_id}',
       });
       await until(() => mockFetch.mock.calls.length === 3 && timeouts.length >= 3);
       expect(timeoutSpy).toHaveBeenCalledWith(30_000);
@@ -610,7 +673,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
     }
   });
 
-  it('dry-run HEAD probes carry a deadline too (a stalled probe just drops its estimate)', async () => {
+  it('preview HEAD probes carry a deadline too (a stalled probe just drops its estimate)', async () => {
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
     try {
       mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
@@ -619,8 +682,8 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
       await until(() => mockFetch.mock.calls.length === 3 && timeouts.length >= 3);
       for (const ac of timeouts) ac.abort(new DOMException('timeout', 'TimeoutError'));
       const out = parse(await call);
-      expect(out.preview).toBe(true);
-      expect(out.estimated_total_bytes).toBe(40_000);
+      expect(out.status).toBe('confirmation-required');
+      expect(out.preview.estimated_total_bytes).toBe(40_000);
       for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit).signal).toBeInstanceOf(AbortSignal);
     } finally {
       await h.close();
@@ -628,7 +691,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
   });
 
   it("the caller's cancellation aborts in-flight image GETs", async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
     try {
       const signals: AbortSignal[] = [];
       mockFetch.mockImplementation(((_url: string, init?: RequestInit) => {
@@ -637,7 +700,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
       }) as never);
       const ac = new AbortController();
       const call = h.client.callTool(
-        { name: 'artsonia_download_artwork', arguments: { artist_id: '1', dest: dir, filename_template: '{artwork_id}', confirm: true } },
+        { name: 'artsonia_download_artwork', arguments: { artist_id: '1', dest: dir, filename_template: '{artwork_id}' } },
         { signal: ac.signal },
       );
       await until(() => mockFetch.mock.calls.length === 3);

@@ -34,7 +34,7 @@ server`) is retained only as an optional fallback.
 - **Account:** parent/fan.
 - **Reads:** followed students, portfolio, artwork detail, comments, activity
   feed/notifications, fan list.
-- **Writes (confirm-gated, dry-run `preview()` by default)** — all verified:
+- **Writes (confirmation-gated: an elicitation prompt, or a preview + single-use `confirmToken` on clients without one)** — all verified:
   - `artsonia_post_comment` — `POST /museum/enter.asp?artist=&art=`, body
     `Comment=<text>`.
   - `artsonia_invite_fan` — `POST /members/fanclub/add.asp?artist=`, isolated
@@ -44,7 +44,7 @@ server`) is retained only as an optional fallback.
     form (`POST /members/profile/default.asp`): GET profile, re-send all
     current values verbatim, flip ONLY the chosen opt-in
     (`OptInNews`/`OptInArtistActivity`/`OptInPromos`), leave password fields
-    blank / `DidChangePassword=0`. Bundles PII — handled carefully, confirm-gated.
+    blank / `DidChangePassword=0`. Bundles PII — handled carefully, confirmation-gated.
   - `artsonia_star_artwork` — **DROPPED**: no star/favorite control exists for
     the parent role (verified absent).
 - **Out of scope (YAGNI):** teacher/student roles, product/keepsake purchasing,
@@ -111,8 +111,12 @@ fetchproxy is retained as an **optional fallback transport**, not the default.
   student(s).
 - `artsonia_get_fans` — the student's fan-club list.
 
-**Writes** (all `confirm`-gated via `schemaConfirm`; no `confirm:true` →
-no network call, return dry-run `preview()`; all via `client.write()`):
+**Writes** (all confirmation-gated via mcp-utils' `requireConfirmationWithFallback` +
+`confirmationFromEnv`: an elicitation prompt where the client supports one;
+otherwise a first call that makes no mutating network call and returns a preview
+plus a `confirmToken`, and a repeat call with that token that performs the write;
+all via `client.write()`). *Originally `confirm`-gated via `schemaConfirm`; replaced
+by the confirm-token flow.*
 - `artsonia_post_comment`
 - `artsonia_invite_fan`
 - `artsonia_set_notifications` (read-modify-write of the master profile form)
@@ -122,7 +126,7 @@ no network call, return dry-run `preview()`; all via `client.write()`):
 tool → `client.fetchHtml(path)` → `AuthManager` ensures a live cookie session
 (login if needed) → `ArtsoniaTransport.request` (default: node `fetch` + cookie
 jar) → server-rendered HTML → `parse.ts` → `textResult(data)`. On a login
-redirect the client re-logs-in once and retries. Writes prepend the `confirm`
+redirect the client re-logs-in once and retries. Writes prepend the confirmation
 gate + `client.write()` (form-urlencoded POST through the same session).
 
 ## Error handling

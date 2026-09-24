@@ -1,6 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { NumericIdString, minifiedResult, schemaConfirm, toolAnnotations } from '@chrischall/mcp-utils';
+import {
+  NumericIdString,
+  confirmTokenParam,
+  confirmationFromEnv,
+  minifiedResult,
+  requireConfirmationWithFallback,
+  toolAnnotations,
+} from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
 
@@ -35,24 +42,30 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     {
       title: 'Mark a student\'s feedback as read',
       description:
-        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Without confirm:true this is a DRY RUN that returns a preview and makes no network call.",
+        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE).",
       annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
-        confirm: schemaConfirm,
+        confirmToken: confirmTokenParam,
       }),
     },
-    async ({ artist_id, confirm }) => {
+    async ({ artist_id, confirmToken }, ctx) => {
       const path = `/members/feedback/default.asp?artist=${artist_id}`;
       const body = new URLSearchParams({ ConfirmAsRead: 'Mark as Read' }).toString();
-      if (confirm !== true) {
-        return minifiedResult({
-          preview: true,
-          action: 'mark_feedback_read',
-          note: 'DRY RUN — nothing was sent. Re-run with confirm: true to mark ALL of this student\'s feedback as read.',
-          wouldSend: { path, ConfirmAsRead: 'Mark as Read' },
-        });
-      }
+      const wouldSend = { path, ConfirmAsRead: 'Mark as Read' };
+      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+        action: 'artsonia.mark_feedback_read',
+        message: "Review and confirm marking ALL of this student's teacher feedback as read:",
+        details: { artist_id },
+        tool: 'artsonia_mark_feedback_read',
+        confirmToken,
+        subject: () => ({
+          target: artist_id,
+          payload: wouldSend,
+          preview: { wouldSend, note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },
+        }),
+      }));
+      if (gate) return gate;
       const res = await client.write(path, body);
       // A 3xx doesn't prove the mark-all stuck (Artsonia 302s even on payloads it
       // drops). Re-read the feedback page and confirm nothing is still unread.
