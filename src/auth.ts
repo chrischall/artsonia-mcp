@@ -29,15 +29,26 @@ interface ArtsoniaSession {
 // retrying a login that can never succeed without new config.
 const CONFIG_ERROR_MARKER = '__artsonia_missing_creds__';
 
-// Decide whether a direct-mode response means the session expired and a re-login
-// is warranted: Artsonia expires by redirecting (or rendering) back to the login
-// page rather than returning a 401. Detected from the final URL, the login-page
-// body markers, or a manual 3xx Location pointing at login.asp. This is the
-// `isExpired` heuristic the CookieSessionManager replays on (direct mode only).
+// Decide whether a response means the session expired and a re-login is
+// warranted: Artsonia expires by redirecting back to the login page rather than
+// returning a 401. The signals are the final URL, a manual 3xx Location pointing
+// at login.asp, or the login FORM itself rendered in place. This is the
+// `isExpired` heuristic the CookieSessionManager replays on (direct mode), and
+// the signed-out check in fetchproxy mode.
+//
+// Deliberately NOT body prose: artwork pages embed user-generated text (titles,
+// fan comments, teacher feedback), so a comment reading "You need to log in…"
+// used to force a needless re-login on every read of that artwork and then a
+// false "verify the credentials" error. User text arrives HTML-escaped, so it
+// cannot forge the `<form action="…login.asp">` + `name="Password"` structure.
 const LOGIN_RE = /\/members\/login\.asp/i;
-const LOGIN_BODY_RE = /You need to log in|Parent \(or Fan\) Login/i;
+const LOGIN_FORM_RE = /<form\b[^>]*\baction\s*=\s*["']?[^"'\s>]*login\.asp/i;
+const PASSWORD_FIELD_RE = /\bname\s*=\s*["']?Password(?=["'\s/>])/i;
+function rendersLoginForm(body: string): boolean {
+  return LOGIN_FORM_RE.test(body) && PASSWORD_FIELD_RE.test(body);
+}
 export function looksUnauthenticated(res: ArtsoniaResponse): boolean {
-  return LOGIN_RE.test(res.url) || LOGIN_BODY_RE.test(res.body) || (res.location ? LOGIN_RE.test(res.location) : false);
+  return LOGIN_RE.test(res.url) || (res.location ? LOGIN_RE.test(res.location) : false) || rendersLoginForm(res.body);
 }
 
 // Owns the username/password login and the resulting cookie session. Deferred
