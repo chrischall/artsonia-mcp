@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.1](https://github.com/chrischall/artsonia-mcp/compare/v1.2.0...v1.2.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **auth:** only treat a page as signed-out when the Password field is inside the login form ([#185](https://github.com/chrischall/artsonia-mcp/issues/185)) ([b722c5f](https://github.com/chrischall/artsonia-mcp/commit/b722c5f29288f6fe6f4e4fc24752a669cc6b6902)), closes [#184](https://github.com/chrischall/artsonia-mcp/issues/184)
+* **auth:** stop treating login-page text in comments as an expired session ([#183](https://github.com/chrischall/artsonia-mcp/issues/183)) ([65d5d64](https://github.com/chrischall/artsonia-mcp/commit/65d5d64aec7fe588a9c7925ee2614f5c66662da7))
+* **deps:** bump dotenv in the production-majors group ([#181](https://github.com/chrischall/artsonia-mcp/issues/181)) ([eb67423](https://github.com/chrischall/artsonia-mcp/commit/eb674238d5ca0ce90533125de5a193f830e17c53))
+
 ## [1.2.0](https://github.com/chrischall/artsonia-mcp/compare/v1.1.4...v1.2.0) (2026-09-24)
 
 
