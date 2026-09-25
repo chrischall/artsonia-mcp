@@ -221,4 +221,19 @@ describe('looksUnauthenticated', () => {
   it('matches the login form structure rendered in place', () => {
     expect(looksUnauthenticated(at('https://www.artsonia.com/members/', '<FORM method=post action="login.asp"><input name="Username"><input type=password name=Password></FORM>'))).toBe(true);
   });
+  it('requires the Password field to sit inside the login form, not elsewhere on the page', () => {
+    // A header login link/form without a password field plus a separate form
+    // (e.g. a change-password form) carrying name="Password" is a signed-in page.
+    const body = '<form action="/members/login.asp"><input name="Username"></form>'
+      + '<form action="profile.asp"><input type="password" name="Password"></form>';
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/profile.asp', body))).toBe(false);
+  });
+  it('ignores a Password field that appears before the login form', () => {
+    const body = '<form action="profile.asp"><input type="password" name="Password"></form>'
+      + '<form action="login.asp"><input name="Username"></form>';
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/profile.asp', body))).toBe(false);
+  });
+  it('matches a login form whose closing tag is missing (truncated markup)', () => {
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/', '<form action="login.asp"><input name="Username"><input type="password" name="Password">'))).toBe(true);
+  });
 });

@@ -42,10 +42,20 @@ const CONFIG_ERROR_MARKER = '__artsonia_missing_creds__';
 // false "verify the credentials" error. User text arrives HTML-escaped, so it
 // cannot forge the `<form action="…login.asp">` + `name="Password"` structure.
 const LOGIN_RE = /\/members\/login\.asp/i;
-const LOGIN_FORM_RE = /<form\b[^>]*\baction\s*=\s*["']?[^"'\s>]*login\.asp/i;
+const LOGIN_FORM_RE = /<form\b[^>]*\baction\s*=\s*["']?[^"'\s>]*login\.asp/gi;
 const PASSWORD_FIELD_RE = /\bname\s*=\s*["']?Password(?=["'\s/>])/i;
+const FORM_CLOSE_RE = /<\/form\s*>/i;
+// The Password field must sit INSIDE the login form (between its open tag and
+// the next `</form>`, or end of body when the close tag is missing) — a page
+// that merely has a login link/form elsewhere plus an unrelated password field
+// is not the login page.
 function rendersLoginForm(body: string): boolean {
-  return LOGIN_FORM_RE.test(body) && PASSWORD_FIELD_RE.test(body);
+  for (const m of body.matchAll(LOGIN_FORM_RE)) {
+    const rest = body.slice(m.index + m[0].length);
+    const close = rest.search(FORM_CLOSE_RE);
+    if (PASSWORD_FIELD_RE.test(close === -1 ? rest : rest.slice(0, close))) return true;
+  }
+  return false;
 }
 export function looksUnauthenticated(res: ArtsoniaResponse): boolean {
   return LOGIN_RE.test(res.url) || (res.location ? LOGIN_RE.test(res.location) : false) || rendersLoginForm(res.body);
