@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/chrischall/artsonia-mcp/compare/v1.2.1...v1.2.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* **deps:** bump dotenv in the production-dependencies group ([#186](https://github.com/chrischall/artsonia-mcp/issues/186)) ([7d3ba0e](https://github.com/chrischall/artsonia-mcp/commit/7d3ba0eb9743957d961472ebf6ca68f361bd1839))
+
 ## [1.2.1](https://github.com/chrischall/artsonia-mcp/compare/v1.2.0...v1.2.1) (2026-09-25)
 
 
