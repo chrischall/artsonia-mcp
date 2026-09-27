@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.2](https://github.com/chrischall/artsonia-mcp/compare/v1.2.1...v1.2.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* **deps:** bump dotenv in the production-dependencies group ([#186](https://github.com/chrischall/artsonia-mcp/issues/186)) ([7d3ba0e](https://github.com/chrischall/artsonia-mcp/commit/7d3ba0eb9743957d961472ebf6ca68f361bd1839))
+* **deps:** move to [@fetchproxy](https://github.com/fetchproxy) 3.4 for ContextMint Bridge errors, capability subsets and managed pins ([#191](https://github.com/chrischall/artsonia-mcp/issues/191)) ([eaaf231](https://github.com/chrischall/artsonia-mcp/commit/eaaf231d5087f2478c041672a3fa1b109ce2dd74))
+* **deps:** move to @chrischall/mcp-utils 2.8 and [@fetchproxy](https://github.com/fetchproxy) 3.4.1 for clearer browser-bridge errors ([#192](https://github.com/chrischall/artsonia-mcp/issues/192)) ([1e61e4b](https://github.com/chrischall/artsonia-mcp/commit/1e61e4bae38c5002f64490811845ed5bef22128e))
+* **download:** cap inline artwork at 10 MiB so it fails with its own message under mcp-host's 14 MiB result limit ([#188](https://github.com/chrischall/artsonia-mcp/issues/188)) ([0d39daf](https://github.com/chrischall/artsonia-mcp/commit/0d39daf817fc438c38a4971a97eba6a5d6434cd6))
+* **download:** list over-cap inline images as omitted, not downloaded ([#189](https://github.com/chrischall/artsonia-mcp/issues/189)) ([98a7307](https://github.com/chrischall/artsonia-mcp/commit/98a7307a26c0589a0e9fe4f84ba6718ae5841e4b))
+
+
+### Documentation
+
+* **mint:** name the ContextMint Bridge in the hosting note ([#194](https://github.com/chrischall/artsonia-mcp/issues/194)) ([4a4055d](https://github.com/chrischall/artsonia-mcp/commit/4a4055dd9ed3bd2869e5c9700bffd67dede77ebd))
+
 ## [1.2.1](https://github.com/chrischall/artsonia-mcp/compare/v1.2.0...v1.2.1) (2026-09-25)
 
 
