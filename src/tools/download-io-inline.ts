@@ -52,17 +52,18 @@ export class InlineDownloadIO implements DownloadIO {
     return false;
   }
 
-  async writeFile(path: string, bytes: Buffer): Promise<void> {
+  async writeFile(path: string, bytes: Buffer): Promise<void | 'omitted'> {
     // Only image bytes are surfaced inline; JSON sidecars/index have nowhere to
     // go here and are represented by the JSON summary instead.
     if (!/\.jpe?g$/i.test(path)) return;
     // Size guard: keep one inline response under the cap. An over-cap image is
     // dropped and counted so `extraContent()` can flag it rather than silently
-    // truncate.
+    // truncate, and reported back as 'omitted' so the tool lists it as such
+    // instead of as downloaded.
     if (this.bytes + bytes.length > this.maxInlineBytes) {
       this.omitted += 1;
       this.omittedBytes += bytes.length;
-      return;
+      return 'omitted';
     }
     this.bytes += bytes.length;
     this.images.push({ type: 'image', data: bytes.toString('base64'), mimeType: 'image/jpeg' });
