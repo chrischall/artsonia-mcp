@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { registerDownloadTools } from '../../src/tools/download.js';
-import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
+import { InlineDownloadIO, MAX_INLINE_BYTES } from '../../src/tools/download-io-inline.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { client } from '../../src/client.js';
 import { ACCEPT, createTestHarness } from '../helpers.js';
@@ -44,6 +44,42 @@ describe('InlineDownloadIO', () => {
     // Counters reset after the drain — a fresh invocation starts from zero.
     await io.writeFile('/x/c.jpg', Buffer.alloc(6));
     expect(io.extraContent().filter((b) => b.type === 'image')).toHaveLength(1);
+  });
+
+  // mcp-host (the hosted runtime behind claude.ai) replaces any single child
+  // result over 14 MiB of serialized JSON-RPC with a generic "result too large"
+  // error (CHILD_RESULT_MAX_BYTES, chrischall/mcp-host#952). The default cap must
+  // keep a maximal inline result under that, so our own clearer note fires first.
+  const HOST_RESULT_MAX_BYTES = 14 * 1024 * 1024;
+  const MIB = 1024 * 1024;
+
+  it('defaults the inline cap to 10 MiB raw', () => {
+    expect(MAX_INLINE_BYTES).toBe(10 * MIB);
+  });
+
+  it('inlines a payload of exactly 10 MiB and keeps the serialized result under the 14 MiB host limit', async () => {
+    const io = new InlineDownloadIO();
+    await io.writeFile('/x/a.jpg', Buffer.alloc(6 * MIB));
+    await io.writeFile('/x/b.jpg', Buffer.alloc(4 * MIB)); // cumulative = exactly 10 MiB
+    const out = io.extraContent();
+    expect(out.filter((b) => b.type === 'image')).toHaveLength(2);
+    expect(out.filter((b) => b.type === 'text')).toHaveLength(0);
+    const rpc = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: out } });
+    expect(Buffer.byteLength(rpc)).toBeLessThan(HOST_RESULT_MAX_BYTES);
+  });
+
+  it('refuses a payload just over 10 MiB with its own note naming the narrower pulls', async () => {
+    const io = new InlineDownloadIO();
+    await io.writeFile('/x/a.jpg', Buffer.alloc(10 * MIB + 1));
+    const out = io.extraContent();
+    expect(out.filter((b) => b.type === 'image')).toHaveLength(0);
+    const notes = out.filter((b) => b.type === 'text') as { text: string }[];
+    expect(notes).toHaveLength(1);
+    expect(notes[0].text).toMatch(/10 MiB/);
+    // Tells the model what to do instead, using the tool's real parameters.
+    for (const param of ['limit', 'resolution', 'project', 'grade']) {
+      expect(notes[0].text).toContain(`\`${param}\``);
+    }
   });
 
   it('never touches the filesystem: mkdirp/setMtime are no-ops and exists() is always false', async () => {
