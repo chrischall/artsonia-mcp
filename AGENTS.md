@@ -46,7 +46,7 @@ src/
     account.ts            # artsonia_get_awards, artsonia_get_profile
     download.ts           # artsonia_download_artwork + buildFilename()/buildRelPath() + FETCH_CONCURRENCY + the DownloadIO/DownloadContentBlock interface (imports NO node:fs)
     download-io.ts        # NodeDownloadIO: disk-backed IO (persistsFiles=true). The ONLY module in the download path that touches node:fs
-    download-io-inline.ts # InlineDownloadIO: filesystem-free IO (persistsFiles=false) — accumulates image bytes and returns them as base64 MCP image blocks, capped at MAX_INLINE_BYTES (24 MiB); extraContent() DRAINS on read
+    download-io-inline.ts # InlineDownloadIO: filesystem-free IO (persistsFiles=false) — accumulates image bytes and returns them as base64 MCP image blocks, capped at MAX_INLINE_BYTES (10 MiB); extraContent() DRAINS on read
     make-download-io.ts   # makeDownloadIO(): env-driven IO selector (ARTSONIA_INLINE_DOWNLOADS) — the sibling of make-transport.ts
     embed.ts              # embedJpegMetadata(): EXIF (piexif-ts) + hand-rolled IPTC APP13; lazily imported by download.ts
     writes.ts             # artsonia_post_comment, artsonia_invite_fan, artsonia_set_notifications + parseProfileForm()
@@ -64,7 +64,7 @@ src/
 Two traps live here:
 
 - **One IO per invocation, and `extraContent()` drains on read.** `registerDownloadTools` takes a *factory* (`makeIO: () => DownloadIO`) and calls it inside each handler rather than once in `index.ts`, because a shared instance replays call 1's images inside call 2's result. Both halves matter: a per-call instance with a non-draining read leaks within one call, and a shared instance leaks across them.
-- **`MAX_INLINE_BYTES` (24 MiB raw, ~32 MiB base64) is a real ceiling.** An unbounded pull (no `limit`, `resolution: full`) would otherwise blow a host's response-size limit. Over-cap images are dropped and reported in a text block — never silently truncated.
+- **`MAX_INLINE_BYTES` (10 MiB raw, ~13.3 MiB base64) is a real ceiling.** It sits under mcp-host's 14 MiB per-result limit (`CHILD_RESULT_MAX_BYTES`, chrischall/mcp-host#952) so our own actionable note fires before the host's generic "result too large" error; an unbounded pull (no `limit`, `resolution: full`) would otherwise exceed it. Over-cap images are dropped and reported in a text block — never silently truncated.
 
 ## Tool surface
 
