@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vites
 import * as piexif from 'piexif-ts';
 import { registerDownloadTools, buildFilename, buildRelPath } from '../../src/tools/download.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
+import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
 import { client } from '../../src/client.js';
 import {
   ACCEPT, DECLINE, callConfirmed, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach,
@@ -626,6 +627,55 @@ describe('artsonia_download_artwork', () => {
 // they need their own deadline and must honour the caller's cancellation — a
 // stalled connection to images.artsonia.com otherwise hangs its pool worker
 // forever, and six of them hang the whole call.
+// An image the inline IO drops for size never reached the caller, so it must
+// not be reported as downloaded: it is listed as omitted, and the counts and
+// byte total cover only what was actually delivered.
+describe('artsonia_download_artwork — inline cap bookkeeping', () => {
+  it('lists over-cap images as omitted, not downloaded', async () => {
+    // Three 20,000-byte images under a 45,000-byte cap: two fit, one does not.
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO(45_000)));
+    try {
+      const res = await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
+      const out = parse(res);
+      expect(out.downloaded_count).toBe(2);
+      expect(out.omitted_count).toBe(1);
+      expect(out.total_bytes).toBe(40_000);
+      const delivered = (out.downloaded as Array<{ artwork_id: string }>).map((d) => d.artwork_id);
+      const omitted = (out.omitted as Array<{ artwork_id: string; bytes: number; is_private: boolean }>);
+      expect(omitted).toHaveLength(1);
+      expect(omitted[0]!.bytes).toBe(20_000);
+      expect(typeof omitted[0]!.is_private).toBe('boolean');
+      expect([...delivered, omitted[0]!.artwork_id].sort()).toEqual(['100', '200', '300']);
+      expect(res.content.filter((b) => b.type === 'image')).toHaveLength(2);
+    } finally { await h.close(); }
+  });
+
+  // #190: omitted images were FOUND (the listing reached them), just not
+  // delivered, so they count toward the artwork_count sanity check. Leaving
+  // them out raised a false "this pull may be partial" warning.
+  it('counts omitted images as found in count_check, so a capped run is not flagged partial', async () => {
+    mockFetchHtml.mockImplementation(((p: string) =>
+      Promise.resolve(p === '/members/' ? MEMBERS_MATCHING : htmlByPath(p))) as never);
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO(45_000)));
+    try {
+      const out = parse(await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      expect(out.omitted_count).toBe(1);
+      expect(out.count_check).toEqual({ expected: 3, on_disk: 3, ok: true });
+      expect(out).not.toHaveProperty('warning');
+    } finally { await h.close(); }
+  });
+
+  it('carries no omitted fields when everything fit', async () => {
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO()));
+    try {
+      const out = parse(await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      expect(out.downloaded_count).toBe(3);
+      expect(out).not.toHaveProperty('omitted_count');
+      expect(out).not.toHaveProperty('omitted');
+    } finally { await h.close(); }
+  });
+});
+
 describe('artsonia_download_artwork — image fetch deadline & cancellation', () => {
   /** A fetch that never answers until its signal aborts, then rejects with the reason. */
   const stalledFetch = (init?: RequestInit) =>

@@ -46,6 +46,15 @@ describe('InlineDownloadIO', () => {
     expect(io.extraContent().filter((b) => b.type === 'image')).toHaveLength(1);
   });
 
+  // The tool needs to know WHICH images were dropped, so it can list them as
+  // omitted rather than downloaded. writeFile says so per write.
+  it("tells the caller which writes were omitted: 'omitted' over the cap, nothing otherwise", async () => {
+    const io = new InlineDownloadIO(10);
+    expect(await io.writeFile('/x/a.jpg', Buffer.alloc(6))).toBeUndefined();
+    expect(await io.writeFile('/x/b.jpg', Buffer.alloc(6))).toBe('omitted');
+    expect(await io.writeFile('/x/meta.json', Buffer.alloc(60))).toBeUndefined(); // sidecars are never "omitted images"
+  });
+
   // mcp-host (the hosted runtime behind claude.ai) replaces any single child
   // result over 14 MiB of serialized JSON-RPC with a generic "result too large"
   // error (CHILD_RESULT_MAX_BYTES, chrischall/mcp-host#952). The default cap must

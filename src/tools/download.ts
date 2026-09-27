@@ -49,8 +49,13 @@ export interface DownloadIO {
   mkdirp(dir: string): Promise<void>;
   /** Whether a file already exists at `path` (drives `skip_existing`). */
   exists(path: string): boolean;
-  /** Persist `bytes` at `path` (an image `.jpg` or a `.json` sidecar/index). */
-  writeFile(path: string, bytes: Buffer): Promise<void>;
+  /**
+   * Persist `bytes` at `path` (an image `.jpg` or a `.json` sidecar/index).
+   * Resolves `'omitted'` when an image was NOT delivered (the inline IO's size
+   * cap), so the tool lists it as omitted rather than downloaded; anything
+   * else means it was written.
+   */
+  writeFile(path: string, bytes: Buffer): Promise<void | 'omitted'>;
   /** Set `path`'s modified time (no-op where filesystem mtimes don't apply). */
   setMtime(path: string, mtime: Date): Promise<void>;
   /**
@@ -157,6 +162,7 @@ interface Item {
 type Outcome =
   | { kind: 'downloaded'; artwork_id: string; file: string; bytes: number; date_source: 'last-modified' | 'download-time'; timestamp: string; embedded?: boolean }
   | { kind: 'skipped'; artwork_id: string; file: string }
+  | { kind: 'omitted'; artwork_id: string; bytes: number }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
 /** Per-request deadline for an image CDN fetch (matches the page transport's). */
@@ -406,7 +412,9 @@ export function registerDownloadTools(
             }
           }
           if (path_template !== undefined) await io.mkdirp(dirname(file));
-          await io.writeFile(file, buf);
+          if ((await io.writeFile(file, buf)) === 'omitted') {
+            return { kind: 'omitted', artwork_id: it.artwork_id, bytes: buf.length };
+          }
           // date_source / timestamp reflect the file's ACTUAL mtime.
           const fromSource = set_mtime_from_source && sourceDate !== null;
           if (fromSource) await io.setMtime(file, sourceDate!);
@@ -427,6 +435,10 @@ export function registerDownloadTools(
       const downloaded = outcomes.filter((o): o is Extract<Outcome, { kind: 'downloaded' }> => o.kind === 'downloaded');
       const skipped = outcomes.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
       const failed = outcomes.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
+      // Fetched but not delivered: over the inline IO's size cap. Never counted
+      // as downloaded (the caller never received them); extraContent()'s note
+      // says how to narrow the pull to get them.
+      const omitted = outcomes.filter((o): o is Extract<Outcome, { kind: 'omitted' }> => o.kind === 'omitted');
       const byId = new Map(items.map((it) => [it.artwork_id, it]));
       const isPrivate = (artworkId: string) => byId.get(artworkId)?.is_private ?? false;
 
@@ -510,10 +522,13 @@ export function registerDownloadTools(
         try {
           const student = parseStudents(await client.fetchHtml('/members/')).find((s) => s.artist_id === artist_id);
           if (student && student.artwork_count !== null) {
-            const onDiskCount = downloaded.length + skipped.length;
+            // Omitted images count as found: the listing reached them and the
+            // result names them, they just exceeded the inline cap. Leaving them
+            // out flagged every capped run as a partial pull (#190).
+            const onDiskCount = downloaded.length + skipped.length + omitted.length;
             countCheck = { expected: student.artwork_count, on_disk: onDiskCount, ok: onDiskCount === student.artwork_count };
             if (!countCheck.ok) {
-              warning = `Sanity check: downloaded+skipped (${onDiskCount}) != the student's artwork_count (${student.artwork_count}) — this pull may be partial.`;
+              warning = `Sanity check: downloaded+skipped${omitted.length ? '+omitted' : ''} (${onDiskCount}) != the student's artwork_count (${student.artwork_count}) — this pull may be partial.`;
             }
           }
         } catch {
@@ -525,6 +540,7 @@ export function registerDownloadTools(
         downloaded_count: downloaded.length,
         skipped_count: skipped.length,
         failed_count: failed.length,
+        ...(omitted.length ? { omitted_count: omitted.length } : {}),
         private_count: privateCount,
         ...(privateExcluded > 0 ? { private_excluded_count: privateExcluded } : {}),
         total_bytes: downloaded.reduce((sum, d) => sum + d.bytes, 0),
@@ -549,6 +565,7 @@ export function registerDownloadTools(
             }
           : {}),
         ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
+        ...(omitted.length ? { omitted: omitted.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
         ...(indexFile ? { index_file: indexFile } : {}),
         ...(metadataCount !== undefined ? { metadata_count: metadataCount } : {}),
         ...(embed_metadata ? { embedded_count: downloaded.filter((d) => d.embedded).length } : {}),
