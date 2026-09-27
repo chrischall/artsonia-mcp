@@ -15,7 +15,7 @@ Artsonia is a classic server-rendered `.asp` site — no public API, no JSON
 store, no bot wall. All the data (students, portfolios, comments, fans,
 feedback, awards, profile) lives in server-rendered HTML, and auth is a real
 **username + password form POST** that hands back an HttpOnly session
-cookie. No browser, no Transporter extension, no `fpx` bridge is needed —
+cookie. No browser, no ContextMint Bridge extension, no `fpx` bridge is needed —
 `curl` with a cookie jar reaches everything a signed-in parent account can.
 (The MCP keeps `@fetchproxy/server` as an optional fallback transport for
 some future walled endpoint, but nothing documented here needs it.)
