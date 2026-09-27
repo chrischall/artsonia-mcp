@@ -650,6 +650,21 @@ describe('artsonia_download_artwork — inline cap bookkeeping', () => {
     } finally { await h.close(); }
   });
 
+  // #190: omitted images were FOUND (the listing reached them), just not
+  // delivered, so they count toward the artwork_count sanity check. Leaving
+  // them out raised a false "this pull may be partial" warning.
+  it('counts omitted images as found in count_check, so a capped run is not flagged partial', async () => {
+    mockFetchHtml.mockImplementation(((p: string) =>
+      Promise.resolve(p === '/members/' ? MEMBERS_MATCHING : htmlByPath(p))) as never);
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO(45_000)));
+    try {
+      const out = parse(await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      expect(out.omitted_count).toBe(1);
+      expect(out.count_check).toEqual({ expected: 3, on_disk: 3, ok: true });
+      expect(out).not.toHaveProperty('warning');
+    } finally { await h.close(); }
+  });
+
   it('carries no omitted fields when everything fit', async () => {
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO()));
     try {

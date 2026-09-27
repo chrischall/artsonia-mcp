@@ -522,10 +522,13 @@ export function registerDownloadTools(
         try {
           const student = parseStudents(await client.fetchHtml('/members/')).find((s) => s.artist_id === artist_id);
           if (student && student.artwork_count !== null) {
-            const onDiskCount = downloaded.length + skipped.length;
+            // Omitted images count as found: the listing reached them and the
+            // result names them, they just exceeded the inline cap. Leaving them
+            // out flagged every capped run as a partial pull (#190).
+            const onDiskCount = downloaded.length + skipped.length + omitted.length;
             countCheck = { expected: student.artwork_count, on_disk: onDiskCount, ok: onDiskCount === student.artwork_count };
             if (!countCheck.ok) {
-              warning = `Sanity check: downloaded+skipped (${onDiskCount}) != the student's artwork_count (${student.artwork_count}) — this pull may be partial.`;
+              warning = `Sanity check: downloaded+skipped${omitted.length ? '+omitted' : ''} (${onDiskCount}) != the student's artwork_count (${student.artwork_count}) — this pull may be partial.`;
             }
           }
         } catch {
