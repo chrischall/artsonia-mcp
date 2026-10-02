@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { join, basename, dirname, relative } from 'node:path';
 import {
   NumericIdString,
+  assertPathWithinRoots,
   confirmTokenParam,
   confirmationFromEnv,
   expandPath,
@@ -10,6 +11,7 @@ import {
   messageOf,
   minifiedResult,
   requireConfirmationWithFallback,
+  resolveOutputDir,
   toolAnnotations,
   withAmbientCancellation,
 } from '@chrischall/mcp-utils';
@@ -45,6 +47,12 @@ export interface DownloadIO {
    * advertise files it never wrote (honesty contract — see CLAUDE.md).
    */
   readonly persistsFiles: boolean;
+  /**
+   * Folders `dest` must resolve inside (checked through symlinks), on an IO that
+   * writes to disk. `undefined` on an IO that touches no disk (inline), where
+   * `dest` is only a label. See `downloadRoots` in `./make-download-io.ts`.
+   */
+  readonly allowedRoots?: readonly string[];
   /** Create `dir` and any missing parents (recursive mkdir). */
   mkdirp(dir: string): Promise<void>;
   /** Whether a file already exists at `path` (drives `skip_existing`). */
@@ -202,7 +210,7 @@ export function registerDownloadTools(
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
-        dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing.'),
+        dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing. Must be inside the allowed download folders: ARTSONIA_OUTPUT_DIR when set, otherwise ~/Downloads or ~/Pictures (on a hosted server, $MCP_DATA_DIR/downloads); anything else is refused before any download.'),
         project: z.string().min(1).optional().describe('Only artworks whose school-project/class name contains this (case-insensitive).'),
         grade: z.string().min(1).optional().describe('Only artworks created in this grade, e.g. "6" or "Grade 6".'),
         limit: z.number().int().positive().optional().describe('Keep only the N most recent matching artworks (portfolio is newest-first).'),
@@ -232,6 +240,25 @@ export function registerDownloadTools(
       // fast path (review on #30).
       const needDetail = project !== undefined || grade !== undefined || /\{(title|project|grade)\}/.test(templates);
       const destDir = expandPath(dest);
+
+      // One IO PER INVOCATION, not one shared across calls: a filesystem-free
+      // IO buffers image bytes and `extraContent()` drains them on read, so a
+      // shared instance would replay this call's images into the next one's
+      // result (and let concurrent calls drain each other). Made up front so a
+      // `dest` outside the disk IO's roots is refused before any network call
+      // or preview (chrischall/fleet-audit#985).
+      const io = makeIO();
+      const roots = io.allowedRoots;
+      if (roots) {
+        try {
+          assertPathWithinRoots(destDir, roots);
+        } catch {
+          throw new Error(
+            `Refusing to download to ${destDir}: dest must be inside ${roots.join(', ')}. ` +
+              'Pick a folder there, or set ARTSONIA_OUTPUT_DIR (a list of folders) to allow another one.',
+          );
+        }
+      }
 
       /** Full target path for an item (subfolders from path_template + filename). */
       const fileOf = (it: Item, date: string): string => {
@@ -370,12 +397,6 @@ export function registerDownloadTools(
       }));
       if (gate) return gate;
 
-      // One IO PER INVOCATION, not one shared across calls: a filesystem-free
-      // IO buffers image bytes and `extraContent()` drains them on read, so a
-      // shared instance would replay this call's images into the next one's
-      // result (and let concurrent calls drain each other).
-      const io = makeIO();
-
       // write_metadata only earns a detail fetch where its sidecars can actually
       // be written (io.persistsFiles); on the inline IO they're dropped, so skip
       // the fetch. embed_metadata still needs detail (it embeds into the returned
@@ -386,7 +407,11 @@ export function registerDownloadTools(
       }
 
       // 5. Download (bounded concurrency).
-      await io.mkdirp(destDir);
+      // On disk, create `dest` through mcp-utils' confined resolveOutputDir (it
+      // re-checks the roots after mkdir, in case a component was swapped for a
+      // symlink since the preview). The inline IO has no disk to create it on.
+      if (roots) resolveOutputDir(dest, 'ARTSONIA_OUTPUT_DIR', { allowedRoots: roots });
+      else await io.mkdirp(destDir);
       const outcomes = await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
         try {
           // Names/paths without {date}/{school_year} are known up-front → skip before fetching.
