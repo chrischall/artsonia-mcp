@@ -1,11 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
+  CONFIRM_FLOW_SENTENCE,
   NumericIdString,
   confirmTokenParam,
-  confirmationFromEnv,
+  confirmWrite,
   minifiedResult,
-  requireConfirmationWithFallback,
   toolAnnotations,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
@@ -42,7 +42,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     {
       title: 'Mark a student\'s feedback as read',
       description:
-        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE).",
+        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). " + CONFIRM_FLOW_SENTENCE,
       annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
@@ -52,19 +52,17 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     async ({ artist_id, confirmToken }, ctx) => {
       const path = `/members/feedback/default.asp?artist=${artist_id}`;
       const body = new URLSearchParams({ ConfirmAsRead: 'Mark as Read' }).toString();
-      const wouldSend = { path, ConfirmAsRead: 'Mark as Read' };
-      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+      const gate = await confirmWrite(ctx, {
+        tool: 'artsonia_mark_feedback_read',
         action: 'artsonia.mark_feedback_read',
         message: "Review and confirm marking ALL of this student's teacher feedback as read:",
-        details: { artist_id },
-        tool: 'artsonia_mark_feedback_read',
+        // One signed-in Artsonia account per server process.
+        account: undefined,
+        target: artist_id,
+        request: { method: 'POST', path, body: { ConfirmAsRead: 'Mark as Read' } },
+        preview: { note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },
         confirmToken,
-        subject: () => ({
-          target: artist_id,
-          payload: wouldSend,
-          preview: { wouldSend, note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },
-        }),
-      }));
+      });
       if (gate) return gate;
       const res = await client.write(path, body);
       // A 3xx doesn't prove the mark-all stuck (Artsonia 302s even on payloads it

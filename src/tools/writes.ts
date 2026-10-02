@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { parse } from 'node-html-parser';
 import {
   NumericIdString,
+  CONFIRM_FLOW_SENTENCE,
   confirmTokenParam,
-  confirmationFromEnv,
+  confirmWrite,
   minifiedResult,
-  requireConfirmationWithFallback,
   toolAnnotations,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
@@ -51,7 +51,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     'artsonia_post_comment',
     {
       title: 'Post a comment on an artwork',
-      description: "Post a comment on a student's artwork. Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE).",
+      description: "Post a comment on a student's artwork. " + CONFIRM_FLOW_SENTENCE,
       annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
@@ -62,15 +62,17 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     },
     async ({ artist_id, artwork_id, comment, confirmToken }, ctx) => {
       const path = `/museum/enter.asp?artist=${artist_id}&art=${artwork_id}`;
-      const wouldSend = { path, Comment: comment };
-      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+      const gate = await confirmWrite(ctx, {
+        tool: 'artsonia_post_comment',
         action: 'artsonia.post_comment',
         message: 'Review and confirm this comment before it is posted:',
-        details: { artist_id, artwork_id, comment },
-        tool: 'artsonia_post_comment',
+        // One signed-in Artsonia account per server process.
+        account: undefined,
+        target: artwork_id,
+        request: { method: 'POST', path, body: { Comment: comment } },
+        preview: { artist_id, artwork_id },
         confirmToken,
-        subject: () => ({ target: artwork_id, payload: wouldSend, preview: { artist_id, artwork_id, wouldSend } }),
-      }));
+      });
       if (gate) return gate;
       const body = new URLSearchParams({ Comment: comment }).toString();
       const res = await client.write(path, body);
@@ -92,7 +94,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     'artsonia_invite_fan',
     {
       title: "Invite a fan to a student's fan club",
-      description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE). Use only real addresses you're authorized to invite (test with @example.com).",
+      description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. " + CONFIRM_FLOW_SENTENCE + " Use only real addresses you're authorized to invite (test with @example.com).",
       annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
@@ -115,22 +117,18 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         ArtistID: artist_id,
       });
       if (is_parent) params.set('IsParent', 'on');
-      const wouldSend = { path, ...Object.fromEntries(params) };
-      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+      const gate = await confirmWrite(ctx, {
+        tool: 'artsonia_invite_fan',
         action: 'artsonia.invite_fan',
         message: 'Review and confirm this fan invite (it emails the address below):',
-        details: wouldSend,
-        tool: 'artsonia_invite_fan',
+        account: undefined,
+        target: artist_id,
+        request: { method: 'POST', path, body: Object.fromEntries(params) },
+        preview: {
+          note: 'Sends an invite email to this address. Verify RelationshipID against the live Add Fans form; MemberType is assumed "fan".',
+        },
         confirmToken,
-        subject: () => ({
-          target: artist_id,
-          payload: wouldSend,
-          preview: {
-            wouldSend,
-            note: 'Sends an invite email to this address. Verify RelationshipID against the live Add Fans form; MemberType is assumed "fan".',
-          },
-        }),
-      }));
+      });
       if (gate) return gate;
       const res = await client.write(path, params.toString());
       // 3xx ⇒ accepted, not confirmed-sent; no cheap re-read for a pending invite.
@@ -149,7 +147,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     'artsonia_set_notifications',
     {
       title: 'Set notification preferences',
-      description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE). The preview shows the resulting opt-in state.",
+      description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. " + CONFIRM_FLOW_SENTENCE + " The preview shows the resulting opt-in state.",
       annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         news: z.boolean().optional().describe('OptInNews — general Artsonia news emails.'),
@@ -191,21 +189,19 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       // form that will be re-sent: a profile edited between preview and
       // confirmation is refused as DRAFT_CHANGED rather than overwritten.
       const body = params.toString();
-      const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
+      const gate = await confirmWrite(ctx, {
+        tool: 'artsonia_set_notifications',
         action: 'artsonia.set_notifications',
         message: 'Review and confirm these notification settings:',
-        details: resultingOptIns,
-        tool: 'artsonia_set_notifications',
+        account: undefined,
+        target: '/members/profile/',
+        // The whole re-sent form is bound; the preview shows only the resulting
+        // opt-in state (the form also carries the account's name/email).
+        request: { method: 'POST', path: '/members/profile/default.asp', body },
+        willSend: resultingOptIns,
+        preview: { note: 'Re-sends your full profile (name/email preserved, password blanked) to flip only the opt-in(s).' },
         confirmToken,
-        subject: () => ({
-          target: '/members/profile/',
-          payload: { path: '/members/profile/default.asp', body },
-          preview: {
-            wouldSend: { ...resultingOptIns },
-            note: 'Re-sends your full profile (name/email preserved, password blanked) to flip only the opt-in(s).',
-          },
-        }),
-      }));
+      });
       if (gate) return gate;
       const res = await client.write('/members/profile/default.asp', body);
       // Artsonia 302s on a subtly-wrong payload but persists NOTHING, so a 3xx

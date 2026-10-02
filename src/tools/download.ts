@@ -296,6 +296,15 @@ export function registerDownloadTools(
       // resolved plan. Otherwise the first call returns the preview — resolved
       // filenames plus estimated sizes — and a token bound to exactly these
       // artworks and options; only a repeat call carrying it downloads.
+      //
+      // Deliberately NOT the shared `confirmWrite` the other gated tools use
+      // (fleet-audit#985): confirmWrite builds its preview up front and binds
+      // it into the token, but this preview carries best-effort HEAD-probe
+      // size estimates. Bound, a probe that flakes or a CDN length that moves
+      // between the phases would refuse a valid token as DRAFT_CHANGED; built
+      // up front, every elicitation-capable call would pay N HEAD probes that
+      // the lazy `subject` here only runs on the token rail. The token binds
+      // the `payload` (exactly what will be written) and nothing else.
       const gate = await requireConfirmationWithFallback(ctx, confirmationFromEnv({
         action: 'artsonia.download_artwork',
         message: `Review and confirm downloading ${items.length} image(s) to ${destDir}:`,
