@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { registerDownloadTools } from '../../src/tools/download.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
-import { downloadRoots, makeDownloadIO } from '../../src/tools/make-download-io.js';
+import { DEFAULT_DOWNLOAD_ROOTS, downloadRoots, makeDownloadIO } from '../../src/tools/make-download-io.js';
 import { client } from '../../src/client.js';
 import { ACCEPT, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach } from '../helpers.js';
 
@@ -59,6 +59,10 @@ describe('downloadRoots', () => {
   it('a blank or delimiter-only ARTSONIA_OUTPUT_DIR still confines (falls back to the defaults)', () => {
     expect(downloadRoots({ ARTSONIA_OUTPUT_DIR: '  ' })).toEqual(['~/Downloads', '~/Pictures']);
     expect(downloadRoots({ ARTSONIA_OUTPUT_DIR: delimiter })).toEqual(['~/Downloads', '~/Pictures']);
+  });
+  it('a blank or delimiter-only ARTSONIA_OUTPUT_DIR on a hosted server falls back to the hosted default', () => {
+    expect(downloadRoots({ ARTSONIA_OUTPUT_DIR: '  ', MCP_DATA_DIR: '/data' })).toEqual([join('/data', 'downloads')]);
+    expect(downloadRoots({ ARTSONIA_OUTPUT_DIR: delimiter, MCP_DATA_DIR: '/data' })).toEqual([join('/data', 'downloads')]);
   });
   it('makeDownloadIO gives the disk IO those roots; the inline IO has none', () => {
     const saved = { ...process.env };
@@ -145,6 +149,38 @@ describe('artsonia_download_artwork — dest confinement (disk IO)', () => {
     const out = parseResult(await h.callTool('artsonia_download_artwork', { ...args(dest), confirmToken: p1.confirmToken }));
     expect(out.downloaded_count).toBe(1);
     expect(readdirSync(dest)).toEqual(['100.jpg']);
+  });
+});
+
+describe('~-prefixed roots (the production default DEFAULT_DOWNLOAD_ROOTS)', () => {
+  // A fake HOME so `~/Downloads` / `~/Pictures` resolve inside the temp tree.
+  let savedHome: string | undefined;
+  beforeEach(() => {
+    savedHome = process.env.HOME;
+    process.env.HOME = base;
+    mkdirSync(join(base, 'Downloads'));
+  });
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+  });
+
+  it('expands ~ in DEFAULT_DOWNLOAD_ROOTS: ~/Downloads is allowed, ~ itself and ~/Desktop are not', async () => {
+    const io = new NodeDownloadIO(DEFAULT_DOWNLOAD_ROOTS);
+    await io.mkdirp(join(base, 'Downloads', 'art'));
+    expect(existsSync(join(base, 'Downloads', 'art'))).toBe(true);
+    await expect(io.mkdirp(join(base, 'Desktop'))).rejects.toThrow(/outside/i);
+    await expect(io.writeFile(join(base, 'x.jpg'), Buffer.from('x'))).rejects.toThrow();
+    expect(existsSync(join(base, 'Desktop'))).toBe(false);
+  });
+
+  it('the tool accepts a ~/Downloads dest and refuses ~/Desktop, with the default roots', async () => {
+    const h = await tool(() => new NodeDownloadIO(DEFAULT_DOWNLOAD_ROOTS));
+    const ok = await phaseOne(h, 'artsonia_download_artwork', args('~/Downloads/kid'));
+    expect(ok.confirmToken).toEqual(expect.any(String));
+    const res = await h.callTool('artsonia_download_artwork', args('~/Desktop'));
+    expect(res.isError).toBe(true);
+    expect((res.content as Array<{ text: string }>)[0].text).toMatch(/~\/Downloads/);
   });
 });
 
