@@ -36,7 +36,8 @@ describe('feedback tools', () => {
 
   it('mark_feedback_read phase 1 previews the mark-all POST and makes no network call', async () => {
     const out = await phaseOne(harness, 'artsonia_mark_feedback_read', { artist_id: '13447141' });
-    expect(out.preview.wouldSend).toEqual({ path: '/members/feedback/default.asp?artist=13447141', ConfirmAsRead: 'Mark as Read' });
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/feedback/default.asp?artist=13447141' });
+    expect(out.preview.willSend).toEqual({ ConfirmAsRead: 'Mark as Read' });
     expect(out.preview.note).toMatch(/ALL/);
     expect(mockWrite).not.toHaveBeenCalled();
     expect(mockFetchHtml).not.toHaveBeenCalled();

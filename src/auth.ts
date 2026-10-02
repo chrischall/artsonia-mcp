@@ -1,5 +1,5 @@
 import { readEnvVar, McpToolError, CookieJar } from '@chrischall/mcp-utils';
-import { CookieSessionManager } from '@chrischall/mcp-utils/session';
+import { CookieSessionManager, looksLikeLoginPage, type LoginPageSignals } from '@chrischall/mcp-utils/session';
 import type { ArtsoniaResponse, ArtsoniaTransport } from './transport.js';
 import {
   createSessionCache,
@@ -36,29 +36,21 @@ const CONFIG_ERROR_MARKER = '__artsonia_missing_creds__';
 // `isExpired` heuristic the CookieSessionManager replays on (direct mode), and
 // the signed-out check in fetchproxy mode.
 //
-// Deliberately NOT body prose: artwork pages embed user-generated text (titles,
-// fan comments, teacher feedback), so a comment reading "You need to log in…"
-// used to force a needless re-login on every read of that artwork and then a
-// false "verify the credentials" error. User text arrives HTML-escaped, so it
-// cannot forge the `<form action="…login.asp">` + `name="Password"` structure.
-const LOGIN_RE = /\/members\/login\.asp/i;
-const LOGIN_FORM_RE = /<form\b[^>]*\baction\s*=\s*["']?[^"'\s>]*login\.asp/gi;
-const PASSWORD_FIELD_RE = /\bname\s*=\s*["']?Password(?=["'\s/>])/i;
-const FORM_CLOSE_RE = /<\/form\s*>/i;
-// The Password field must sit INSIDE the login form (between its open tag and
-// the next `</form>`, or end of body when the close tag is missing) — a page
-// that merely has a login link/form elsewhere plus an unrelated password field
-// is not the login page.
-function rendersLoginForm(body: string): boolean {
-  for (const m of body.matchAll(LOGIN_FORM_RE)) {
-    const rest = body.slice(m.index + m[0].length);
-    const close = rest.search(FORM_CLOSE_RE);
-    if (PASSWORD_FIELD_RE.test(close === -1 ? rest : rest.slice(0, close))) return true;
-  }
-  return false;
-}
+// The matching itself is the fleet's shared, structural predicate
+// (`looksLikeLoginPage` from @chrischall/mcp-utils/session, fleet-audit#1155) —
+// path+search of the URL/Location, and a `<form action="…login.asp">` holding a
+// `Password` input. Deliberately NOT body prose: artwork pages embed
+// user-generated text (titles, fan comments, teacher feedback), so a comment
+// reading "You need to log in…" must not force a re-login. User text arrives
+// HTML-escaped, so it cannot forge the form structure. No status code counts by
+// itself (statuses: []) — Artsonia never signals expiry with a 401.
+const LOGIN_PAGE: LoginPageSignals = {
+  url: /\/members\/login\.asp/i,
+  form: { action: /login\.asp/i, field: 'Password' },
+  statuses: [],
+};
 export function looksUnauthenticated(res: ArtsoniaResponse): boolean {
-  return LOGIN_RE.test(res.url) || (res.location ? LOGIN_RE.test(res.location) : false) || rendersLoginForm(res.body);
+  return looksLikeLoginPage(res, LOGIN_PAGE);
 }
 
 // Owns the username/password login and the resulting cookie session. Deferred

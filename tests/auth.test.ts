@@ -236,4 +236,15 @@ describe('looksUnauthenticated', () => {
   it('matches a login form whose closing tag is missing (truncated markup)', () => {
     expect(looksUnauthenticated(at('https://www.artsonia.com/members/', '<form action="login.asp"><input name="Username"><input type="password" name="Password">'))).toBe(true);
   });
+  it('ends an unclosed login form at the next <form>, so a later form\'s Password field does not count', () => {
+    // Shared mcp-utils predicate (fleet-audit#1155): an unclosed login form
+    // followed by a change-password form is a signed-in page.
+    const body = '<form action="login.asp"><input name="Username">'
+      + '<form action="profile.asp"><input type="password" name="Password"></form>';
+    expect(looksUnauthenticated(at('https://www.artsonia.com/members/profile.asp', body))).toBe(false);
+  });
+  it('ignores a login.asp mention in the URL fragment', () => {
+    // Only the path+search of the final URL is matched.
+    expect(looksUnauthenticated(at('https://www.artsonia.com/museum/art.asp?id=1#/members/login.asp', ''))).toBe(false);
+  });
 });

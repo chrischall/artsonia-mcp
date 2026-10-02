@@ -39,7 +39,10 @@ describe('write tools', () => {
 
   it('post_comment phase 1 returns the preview + a token and makes no network call', async () => {
     const out = await phaseOne(harness, 'artsonia_post_comment', COMMENT);
-    expect(out.preview.wouldSend).toEqual({ path: '/museum/enter.asp?artist=13447141&art=150567537', Comment: 'Great work!' });
+    // The fleet confirmWrite preview shape: method + path + exactly the form fields sent.
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/museum/enter.asp?artist=13447141&art=150567537' });
+    expect(out.preview.willSend).toEqual({ Comment: 'Great work!' });
+    expect(out.preview).toMatchObject({ artist_id: '13447141', artwork_id: '150567537' });
     expect(out.confirmToken).toEqual(expect.any(String));
     expect(mockWrite).not.toHaveBeenCalled();
   });
@@ -68,7 +71,7 @@ describe('write tools', () => {
     expect(res.isError).toBe(true);
     const out = parse(res);
     expect(out.error).toBe('DRAFT_CHANGED');
-    expect(out.preview.wouldSend.Comment).toBe('Something else'); // fresh preview of what would now be sent
+    expect(out.preview.willSend.Comment).toBe('Something else'); // fresh preview of what would now be sent
     expect(mockWrite).not.toHaveBeenCalled();
   });
   it('post_comment writes on a client that can prompt and accepts', async () => {
@@ -97,8 +100,9 @@ describe('write tools', () => {
 
   it('invite_fan phase 1 previews the form it would send, with the RelationshipID caveat, and does not write', async () => {
     const out = await phaseOne(harness, 'artsonia_invite_fan', INVITE);
-    expect(out.preview.wouldSend).toMatchObject({
-      path: '/members/fanclub/add.asp?artist=13447141', MemberType: 'fan', RelationshipID: '3',
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/fanclub/add.asp?artist=13447141' });
+    expect(out.preview.willSend).toMatchObject({
+      MemberType: 'fan', RelationshipID: '3',
       FirstName: 'Test', LastName: 'Fan', EmailAddress: 'test@example.com', ArtistID: '13447141',
     });
     expect(out.preview.note).toMatch(/RelationshipID/);
@@ -130,7 +134,9 @@ describe('write tools', () => {
   it('set_notifications phase 1 previews the resulting opt-in state without writing', async () => {
     mockFetchHtml.mockResolvedValue(profile as never);
     const out = await phaseOne(harness, 'artsonia_set_notifications', { artist_activity: false });
-    expect(out.preview.wouldSend.OptInArtistActivity).toBe(false);
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/profile/default.asp' });
+    // Shows the resulting opt-in state, not the re-sent form (which carries name/email).
+    expect(out.preview.willSend).toEqual({ OptInNews: expect.any(Boolean), OptInArtistActivity: false, OptInPromos: expect.any(Boolean) });
     expect(out.preview.note).toMatch(/password blanked/);
     expect(mockWrite).not.toHaveBeenCalled();
   });
