@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { describe, it, expect, afterAll } from 'vitest';
 import { createTestHarness } from './helpers.js';
 import { client } from '../src/client.js';
@@ -23,7 +24,7 @@ describe('full tool surface', () => {
       registerFanTools(s, client);
       registerFeedbackTools(s, client);
       registerAccountTools(s, client);
-      registerDownloadTools(s, client, () => new NodeDownloadIO());
+      registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()]));
       registerWriteTools(s, client);
     });
     const names = (await harness.listTools()).map((t) => t.name).sort();

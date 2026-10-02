@@ -34,7 +34,8 @@
       ],
       "env": {
         "ARTSONIA_USERNAME": "${user_config.artsonia_username}",
-        "ARTSONIA_PASSWORD": "${user_config.artsonia_password}"
+        "ARTSONIA_PASSWORD": "${user_config.artsonia_password}",
+        "ARTSONIA_OUTPUT_DIR": "${user_config.artsonia_output_dir}"
       }
     }
   },
@@ -52,6 +53,13 @@
       "description": "Your Artsonia account password",
       "required": true,
       "sensitive": true
+    },
+    "artsonia_output_dir": {
+      "type": "string",
+      "title": "Download folders",
+      "description": "Folders artsonia_download_artwork may save into (separate several with ':'). Leave empty to allow ~/Downloads and ~/Pictures only; any other destination is refused.",
+      "required": false,
+      "sensitive": false
     }
   },
   "tools": [
@@ -101,7 +109,7 @@
     },
     {
       "name": "artsonia_download_artwork",
-      "description": "Download a student's artwork images to a local folder (writes files to disk)"
+      "description": "Download a student's artwork images to a local folder inside ~/Downloads, ~/Pictures or ARTSONIA_OUTPUT_DIR (writes files to disk)"
     },
     {
       "name": "artsonia_post_comment",

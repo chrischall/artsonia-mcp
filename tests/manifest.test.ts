@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { describe, it, expect, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -37,7 +38,7 @@ describe('manifest.json', () => {
       registerFanTools(s, client);
       registerFeedbackTools(s, client);
       registerAccountTools(s, client);
-      registerDownloadTools(s, client, () => new NodeDownloadIO());
+      registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()]));
       registerWriteTools(s, client);
     });
     const registered = (await harness.listTools()).map((t) => t.name).sort();

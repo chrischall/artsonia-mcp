@@ -41,6 +41,12 @@
           "description": "Absolute path for the session cache file. Defaults to $MCP_DATA_DIR/.artsonia-mcp/session-<user>.json.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "ARTSONIA_OUTPUT_DIR",
+          "description": "Folders artsonia_download_artwork may save into (a path-delimiter list: ':' on macOS/Linux, ';' on Windows). Unset: ~/Downloads and ~/Pictures, or $MCP_DATA_DIR/downloads when MCP_DATA_DIR is set. Any other dest is refused.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

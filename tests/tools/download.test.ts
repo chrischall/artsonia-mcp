@@ -146,8 +146,8 @@ describe('buildRelPath', () => {
 
 describe('artsonia_download_artwork', () => {
   it('setup + registers the tool', async () => {
-    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
-    confirmed = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
+    harness = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])));
+    confirmed = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), ACCEPT);
     expect((await harness.listTools()).map((t) => t.name)).toContain('artsonia_download_artwork');
   });
 
@@ -187,7 +187,7 @@ describe('artsonia_download_artwork', () => {
   });
 
   it('writes nothing when the confirmation prompt is declined', async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), DECLINE);
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), DECLINE);
     try {
       const out = parse(await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
       expect(out.confirmed).toBe(false);
@@ -704,7 +704,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
   afterEach(() => { timeoutSpy.mockRestore(); });
 
   it('a stalled image GET times out into a per-item failure; the rest still download', async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), ACCEPT);
     try {
       mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
         String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
@@ -724,7 +724,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
   });
 
   it('preview HEAD probes carry a deadline too (a stalled probe just drops its estimate)', async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()));
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])));
     try {
       mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
         String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
@@ -741,7 +741,7 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
   });
 
   it("the caller's cancellation aborts in-flight image GETs", async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO()), ACCEPT);
+    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), ACCEPT);
     try {
       const signals: AbortSignal[] = [];
       mockFetch.mockImplementation(((_url: string, init?: RequestInit) => {

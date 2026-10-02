@@ -6,6 +6,14 @@
 
 Artsonia MCP server for Claude — developed and maintained by AI (Claude Code)
 
+## Download folders
+
+`artsonia_download_artwork` saves images only inside an allowed folder; any other `dest` is refused before anything is fetched or written, and no file is ever written through a symlink.
+
+| variable | default | |
+|---|---|---|
+| `ARTSONIA_OUTPUT_DIR` | `~/Downloads` and `~/Pictures` | The folders `dest` must be inside (subfolders are fine and are created). Several folders: separate them with `:` (`;` on Windows). On a hosted server (`MCP_DATA_DIR` set) the default is `$MCP_DATA_DIR/downloads` instead. With `ARTSONIA_INLINE_DOWNLOADS=1` nothing is written to disk, so `dest` is only a label and is not checked. |
+
 ## Confirmations
 
 Every write — posting a comment, inviting a fan, changing notification settings, marking feedback read, and downloading artwork to disk — asks you to confirm it first. A client that can show a confirmation prompt (Claude Code) shows one. A client that cannot (claude.ai, Claude Desktop) gets a two-step flow instead: the first call changes nothing and returns a preview of exactly what would be sent or written plus a `confirmToken`; only a second, identical call carrying that token goes ahead. The token is single-use, expires, and is refused if anything changed between the two calls.

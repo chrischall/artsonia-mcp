@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { registerDownloadTools } from '../../src/tools/download.js';
 import { InlineDownloadIO, MAX_INLINE_BYTES } from '../../src/tools/download-io-inline.js';
 import { NodeDownloadIO } from '../../src/tools/download-io.js';
+import { tmpdir } from 'node:os';
 import { client } from '../../src/client.js';
 import { ACCEPT, createTestHarness } from '../helpers.js';
 
@@ -107,7 +108,7 @@ describe('InlineDownloadIO', () => {
 
 describe('NodeDownloadIO', () => {
   it('persistsFiles is true', () => {
-    expect(new NodeDownloadIO().persistsFiles).toBe(true);
+    expect(new NodeDownloadIO([tmpdir()]).persistsFiles).toBe(true);
   });
 });
 
@@ -188,8 +189,10 @@ describe('artsonia_download_artwork on the inline IO', () => {
         artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1,
       }),
     ]);
-    expect(built).toHaveLength(2);
-    expect(built[0]).not.toBe(built[1]);
+    // One IO per handler invocation (the confirm round trip re-invokes the
+    // handler, so each call may build more than one) — never a shared instance.
+    expect(built.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(built).size).toBe(built.length);
     // Each result carries exactly its own images, whichever order they finished in.
     expect([imageBlocks(a).length, imageBlocks(b).length].sort()).toEqual([1, 2]);
     await harness.close();
