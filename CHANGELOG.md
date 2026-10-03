@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.3](https://github.com/chrischall/artsonia-mcp/compare/v1.2.2...v1.2.3) (2026-10-03)
+
+
+### Bug Fixes
+
+* **deps:** adopt @chrischall/mcp-utils 2.12.0 confirmWrite and login-page predicate ([#203](https://github.com/chrischall/artsonia-mcp/issues/203)) ([6d5be28](https://github.com/chrischall/artsonia-mcp/commit/6d5be284b9f22d397f3a4351e607ea3355e71f06))
+* **deps:** bump @chrischall/mcp-utils to 2.13.0 ([#207](https://github.com/chrischall/artsonia-mcp/issues/207)) ([e65f66c](https://github.com/chrischall/artsonia-mcp/commit/e65f66cbd3f9e8a4d0880550146183354c44da86))
+* **deps:** bump the production-dependencies group with 2 updates ([#202](https://github.com/chrischall/artsonia-mcp/issues/202)) ([7e2e1ca](https://github.com/chrischall/artsonia-mcp/commit/7e2e1caf396b9a054058c6073a29a73e590bb230))
+* **download:** only save artwork inside allowed download folders ([#204](https://github.com/chrischall/artsonia-mcp/issues/204)) ([74cf761](https://github.com/chrischall/artsonia-mcp/commit/74cf761304cd6a53e7809c5af2b386fa04fd3562))
+* keep credentials and report edge_blocked on CDN/WAF blocks (mcp-utils 2.10.0) ([#198](https://github.com/chrischall/artsonia-mcp/issues/198)) ([73210d0](https://github.com/chrischall/artsonia-mcp/commit/73210d00cec0936a205eb5b86701f80c70b6ab30))
+* keep write approvals valid across a hosted restart (mcp-utils 2.11.0) ([#199](https://github.com/chrischall/artsonia-mcp/issues/199)) ([da76a86](https://github.com/chrischall/artsonia-mcp/commit/da76a8638308878e8f7ec52fc94bce449eeaf7b7))
+* report CDN/WAF blocks as edge_blocked, not a rejected credential (mcp-utils 2.9.0) ([#195](https://github.com/chrischall/artsonia-mcp/issues/195)) ([98db7ee](https://github.com/chrischall/artsonia-mcp/commit/98db7ee7981114737b232b5d90594dec932ae6e1))
+
 ## [1.2.2](https://github.com/chrischall/artsonia-mcp/compare/v1.2.1...v1.2.2) (2026-09-27)
 
 
