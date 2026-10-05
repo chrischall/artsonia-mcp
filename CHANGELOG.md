@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.4](https://github.com/chrischall/artsonia-mcp/compare/v1.2.3...v1.2.4) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** require @chrischall/mcp-utils 2.14.0 and MCP SDK 2.3.0 ([#208](https://github.com/chrischall/artsonia-mcp/issues/208)) ([99010d9](https://github.com/chrischall/artsonia-mcp/commit/99010d985d882decef8783a42bf42090cb1cfe26))
+
 ## [1.2.3](https://github.com/chrischall/artsonia-mcp/compare/v1.2.2...v1.2.3) (2026-10-03)
 
 
