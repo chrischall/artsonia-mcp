@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.5](https://github.com/chrischall/artsonia-mcp/compare/v1.2.4...v1.2.5) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** bump source-map-js ([#212](https://github.com/chrischall/artsonia-mcp/issues/212)) ([9266438](https://github.com/chrischall/artsonia-mcp/commit/92664388fcb85bd9a23398c9ca49f2cfdac304b9))
+* **deps:** pick up mcp-utils 2.15.0 and fetchproxy 3.6.0 (elicitation opt-out, hosted-relay frames) ([#210](https://github.com/chrischall/artsonia-mcp/issues/210)) ([ac2c269](https://github.com/chrischall/artsonia-mcp/commit/ac2c2693b30bb79fddf7d3671a15d179bc464207))
+
+
+### Documentation
+
+* document MCP_CONFIRM_ELICITATION ([#213](https://github.com/chrischall/artsonia-mcp/issues/213)) ([5153489](https://github.com/chrischall/artsonia-mcp/commit/5153489f956362b7ed6840436319325f04612cb0))
+
 ## [1.2.4](https://github.com/chrischall/artsonia-mcp/compare/v1.2.3...v1.2.4) (2026-10-05)
 
 
