@@ -102,6 +102,7 @@ The write tools (`artsonia_post_comment`, `artsonia_invite_fan`, `artsonia_set_n
 | `ARTSONIA_INLINE_DOWNLOADS` | No | Set to `1` on a hosted deployment to return `artsonia_download_artwork` images as inline base64 blocks instead of writing them to a disk the user can't reach. Leave unset for local installs. |
 | `ARTSONIA_SESSION_CACHE` | No | Set to `false` to disable the on-disk session cache and log in on every start. Defaults to enabled (direct transport only). |
 | `MCP_CONFIRM_MODE` | No | What a write does on a client that cannot show a confirmation prompt: `ask-user` (default — preview + token, user approves in chat), `auto` (the model may use the token after reviewing the preview), or `refuse`. An unrecognised value is treated as `refuse`. |
+| `MCP_CONFIRM_ELICITATION` | No | `off` never shows a confirmation prompt, so every client gets the `MCP_CONFIRM_MODE` token flow — for a client that claims to support prompts but never shows one (the write hangs — opencode 2.0.x). Defaults to `on`; any other value stays `on`, with a warning on stderr. |
 | `MCP_CONFIRM_TTL_SECONDS` | No | How long a confirmation token stays valid. Defaults to `600`. |
 | `MCP_CONFIRM_SECRET` | No | Token signing key; set it only if tokens must survive a server restart. Defaults to random per process. |
 | `ARTSONIA_SESSION_FILE` | No | Override the session cache path. Defaults to `$MCP_DATA_DIR/.artsonia-mcp/session-<user>.json` — one file per user, so per-credential clients do not clobber each other. |
