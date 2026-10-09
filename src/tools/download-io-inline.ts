@@ -30,9 +30,12 @@ const formatCap = (bytes: number): string =>
 // wrote). `exists()` always returns false, so `skip_existing` never skips
 // (nothing persists between calls). Imports NO `node:fs`.
 //
-// One instance is registered ONCE and REUSED across every
-// `artsonia_download_artwork` invocation, so `extraContent()` DRAINS its buffer
-// on read — each call returns only its own images, never a prior call's.
+// One instance PER INVOCATION: `registerDownloadTools` calls `makeIO()` afresh
+// for every `artsonia_download_artwork` call, so concurrent calls never share a
+// buffer (a shared instance would let one call drain another's images). Do not
+// refactor this into a single registered instance. `extraContent()` still
+// DRAINS its buffer on read, as defence in depth: a reused instance would then
+// return only its own images, never a prior call's.
 export class InlineDownloadIO implements DownloadIO {
   readonly persistsFiles = false;
   private images: DownloadContentBlock[] = [];
@@ -74,9 +77,9 @@ export class InlineDownloadIO implements DownloadIO {
   }
 
   extraContent(): DownloadContentBlock[] {
-    // Drain: each tool invocation must return only its own images. The instance
-    // is shared for the session, so leaving state populated would leak prior
-    // calls' bytes (and cap counters) into later results.
+    // Drain (defence in depth): each instance serves one invocation, but
+    // resetting here guarantees a reused instance could never leak a prior
+    // call's bytes (or cap counters) into a later result.
     const out = this.images;
     if (this.omitted > 0) {
       const mb = Math.max(1, Math.round(this.omittedBytes / 1024 / 1024));
