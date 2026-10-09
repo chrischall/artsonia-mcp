@@ -16,7 +16,7 @@ Artsonia MCP server for Claude — developed and maintained by AI (Claude Code)
 
 ## Confirmations
 
-Every write — posting a comment, inviting a fan, changing notification settings, marking feedback read, and downloading artwork to disk — asks you to confirm it first. A client that can show a confirmation prompt (Claude Code) shows one. A client that cannot (claude.ai, Claude Desktop) gets a two-step flow instead: the first call changes nothing and returns a preview of exactly what would be sent or written plus a `confirmToken`; only a second, identical call carrying that token goes ahead. The token is single-use, expires, and is refused if anything changed between the two calls.
+The writes that reach other people — posting a comment and inviting a fan — ask you to confirm them first. Changing your notification settings, marking feedback read, and downloading artwork into your allowed download folders run straight away. A client that can show a confirmation prompt (Claude Code) shows one. A client that cannot (claude.ai, Claude Desktop) gets a two-step flow instead: the first call changes nothing and returns a preview of exactly what would be sent plus a `confirmToken`; only a second, identical call carrying that token goes ahead. The token is single-use, expires, and is refused if anything changed between the two calls.
 
 | variable | default | |
 |---|---|---|

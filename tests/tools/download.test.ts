@@ -5,7 +5,7 @@ import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
 import { client } from '../../src/client.js';
 import {
-  ACCEPT, DECLINE, callConfirmed, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach,
+  ACCEPT, DECLINE, createTestHarness, parseResult, restoreConfirmEnvAfterEach,
 } from '../helpers.js';
 import { tinyJpeg, parseIptc } from '../jpeg-fixture.js';
 import { mkdtempSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs';
@@ -72,8 +72,8 @@ function imageResponse(lastModified = LASTMOD) {
   });
 }
 
-// `harness` cannot be prompted, so a call without a token stops at the preview;
-// `confirmed` can, and accepts — the stand-in for an approved download.
+// `harness` cannot be prompted and `confirmed` can (and would accept); the tool
+// is ungated (fleet-audit#1154), so both download on the first call.
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
 let confirmed: Awaited<ReturnType<typeof createTestHarness>>;
 let dir: string;
@@ -91,9 +91,6 @@ afterAll(async () => {
 });
 const parse = parseResult;
 restoreConfirmEnvAfterEach();
-/** Phase 1 on the harness that cannot prompt: the preview the user would approve. */
-const preview = async (args: Record<string, unknown>) =>
-  (await phaseOne(harness, 'artsonia_download_artwork', args)).preview;
 
 describe('buildFilename', () => {
   it('default template → grade/project/title with auto-appended id, slugified', () => {
@@ -168,12 +165,12 @@ describe('artsonia_download_artwork', () => {
     expect((await harness.listTools()).map((t) => t.name)).toContain('artsonia_download_artwork');
   });
 
-  it('takes confirmToken and no confirm parameter', async () => {
+  it('takes no confirmToken or confirm parameter, and its description asks for no confirmation (fleet-audit#1154)', async () => {
     const { tools } = await harness.client.listTools();
     const props = Object.keys(tools[0].inputSchema.properties ?? {});
-    expect(props).toContain('confirmToken');
+    expect(props).not.toContain('confirmToken');
     expect(props).not.toContain('confirm');
-    expect(tools[0].description).toMatch(/confirmToken/);
+    expect(tools[0].description).not.toMatch(/confirmToken|confirm first/i);
   });
 
   it('is annotated destructive: it can overwrite existing images, sidecars and index.json (fleet-audit#365)', async () => {
@@ -181,86 +178,28 @@ describe('artsonia_download_artwork', () => {
     expect(tools[0].annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
-  it('phase 2 with the returned token downloads exactly once', async () => {
+  it('downloads in ONE call on a client that cannot prompt — no preview, no HEAD probes', async () => {
     const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
-    const p1 = await phaseOne(harness, 'artsonia_download_artwork', args);
-    expect(readdirSync(dir)).toHaveLength(0);
-    for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit)?.method).toBe('HEAD');
-    mockFetch.mockClear();
-    const out = parse(await harness.callTool('artsonia_download_artwork', { ...args, confirmToken: p1.confirmToken }));
+    const out = parse(await harness.callTool('artsonia_download_artwork', args));
+    expect(out.status).toBeUndefined();
     expect(out.downloaded_count).toBe(3);
     expect(readdirSync(dir).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
-    const gets = mockFetch.mock.calls.filter(([, init]) => (init as RequestInit)?.method !== 'HEAD');
-    expect(gets).toHaveLength(3);
+    expect(mockFetch.mock.calls.filter(([, init]) => (init as RequestInit)?.method === 'HEAD')).toHaveLength(0);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
-  it('refuses the token when the portfolio changed between preview and confirmation (DRAFT_CHANGED), writing nothing', async () => {
-    const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
-    const { confirmToken } = await phaseOne(harness, 'artsonia_download_artwork', args);
-    // A new artwork appeared: what would now be downloaded is not what was approved.
-    const grown = PORTFOLIO.replace('<div class="grid">', '<div class="grid"><div class="grid-item"><div class="grid-item-art"><a href="/museum/art.asp?id=400"><div class="genthumb"></div></a></div></div>');
-    mockFetchHtml.mockImplementation(((p: string) => Promise.resolve(p.includes('portfolio.asp') ? grown : htmlByPath(p))) as never);
-    const res = await harness.callTool('artsonia_download_artwork', { ...args, confirmToken });
-    expect(res.isError).toBe(true);
-    const out = parse(res);
-    expect(out.error).toBe('DRAFT_CHANGED');
-    expect(out.preview.count).toBe(4);
-    expect(readdirSync(dir)).toHaveLength(0);
-  });
-
-  it('refuses a token replayed with different arguments, even when the resulting payload is identical (mcp-utils 3.0 args binding)', async () => {
-    const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
-    const { confirmToken } = await phaseOne(harness, 'artsonia_download_artwork', args);
-    // limit 5 over a 3-artwork portfolio selects the same artworks, so only the
-    // args binding (not the payload) can tell the two calls apart.
-    const res = await harness.callTool('artsonia_download_artwork', { ...args, limit: 5, confirmToken });
-    expect(res.isError).toBe(true);
-    expect(parse(res).error).toMatch(/^(TOKEN_INVALID|DRAFT_CHANGED)$/);
-    expect(readdirSync(dir)).toHaveLength(0);
-  });
-
-  it('writes nothing when the confirmation prompt is declined', async () => {
+  it('never asks: a client that would decline a prompt still downloads', async () => {
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), DECLINE);
     try {
       const out = parse(await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
-      expect(out.confirmed).toBe(false);
-      expect(readdirSync(dir)).toHaveLength(0);
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(out.downloaded_count).toBe(3);
     } finally { await h.close(); }
   });
 
-  it('MCP_CONFIRM_MODE=refuse refuses on a client that cannot prompt, writing nothing', async () => {
+  it('MCP_CONFIRM_MODE=refuse does not block it (the tool is no longer gated)', async () => {
     process.env.MCP_CONFIRM_MODE = 'refuse';
-    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir }));
-    expect(out.reason).toBe('confirmation-unsupported');
-    expect(readdirSync(dir)).toHaveLength(0);
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it('preview (phase 1) resolves descriptive filenames and writes nothing (only HEAD size probes, no GETs)', async () => {
-    const out = await preview({ artist_id: '1', dest: dir });
-    expect(out.count).toBe(3);
-    expect(out.artworks[0]).toMatchObject({ artwork_id: '300', filename: 'Grade 6 - Silhouette - My silhouette (300).jpg' });
-    // Size estimation may probe the public CDN, but only with HEAD — never a body download.
-    for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit)?.method).toBe('HEAD');
-    expect(readdirSync(dir)).toHaveLength(0);
-  });
-
-  it('preview (phase 1) reports estimated bytes per item and in total, plus is_private', async () => {
-    const out = await preview({ artist_id: '2', dest: dir });
-    expect(out.estimated_total_bytes).toBe(60_000);
-    expect(out.artworks[0]).toMatchObject({ artwork_id: '300', is_private: true, estimated_bytes: 20_000 });
-    expect(out.artworks[1]).toMatchObject({ artwork_id: '200', is_private: false, estimated_bytes: 20_000 });
-    expect(out.private_count).toBe(1);
-    expect(readdirSync(dir)).toHaveLength(0);
-  });
-
-  it('preview (phase 1) estimates degrade gracefully when the HEAD probe fails', async () => {
-    mockFetch.mockImplementation(() => Promise.reject(new Error('network down')));
-    const out = await preview({ artist_id: '1', dest: dir });
-    expect(out.count).toBe(3);
-    expect(out.estimated_total_bytes).toBeUndefined();
-    expect(out.artworks[0].estimated_bytes).toBeUndefined();
+    const out = parse(await harness.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+    expect(out.downloaded_count).toBe(3);
   });
 
   it('downloads with title-based names and sets mtime from Last-Modified', async () => {
@@ -291,15 +230,6 @@ describe('artsonia_download_artwork', () => {
     expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
     expect(out.downloaded[0].date_source).toBe('download-time');
     expect(statSync(join(dir, '300.jpg')).mtime.getUTCFullYear()).not.toBe(2022);
-  });
-
-  it('write_metadata does not break the id-only fast path in the preview (comments unused in previews)', async () => {
-    await preview({
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', write_metadata: true,
-    });
-    // Portfolio only — the preview discards comments, so no per-artwork detail.
-    expect(mockFetchHtml).toHaveBeenCalledTimes(1);
-    expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
   });
 
   it('skip_existing makes a re-run a no-op (no image re-fetch)', async () => {
@@ -601,14 +531,6 @@ describe('artsonia_download_artwork', () => {
     expect(mockFetch.mock.calls.length).toBe(callsAfterFirst); // no new image fetches
   });
 
-  it('preview (phase 1) with path_template previews the folder-relative paths and writes nothing', async () => {
-    const out = await preview({
-      artist_id: '1', dest: dir, path_template: '{grade}/{project}', filename_template: '{title}',
-    });
-    expect(out.artworks[0]).toMatchObject({ artwork_id: '300', filename: 'Grade 6/Silhouette/My silhouette (300).jpg' });
-    expect(readdirSync(dir)).toHaveLength(0);
-  });
-
   it('write_index with path_template records folder-relative file paths', async () => {
     const out = parse(await confirmed.callTool('artsonia_download_artwork', {
       artist_id: '1', dest: dir, path_template: '{grade}/{project}', write_index: true,
@@ -675,15 +597,7 @@ describe('artsonia_download_artwork', () => {
     expect(written.equals(Buffer.alloc(20_000))).toBe(true);
   });
 
-  it('embed_metadata keeps the id-only fast path in the preview (detail only fetched on confirmed runs)', async () => {
-    await preview({
-      artist_id: '1', dest: dir, filename_template: '{artwork_id}', embed_metadata: true,
-    });
-    expect(mockFetchHtml).toHaveBeenCalledTimes(1); // portfolio only
-    expect(mockFetchHtml.mock.calls.map((c) => c[0])).not.toContainEqual(expect.stringContaining('art.asp'));
-  });
-
-  it('embed_metadata on the id-only template fetches detail on the confirmed run (fields needed for EXIF)', async () => {
+  it('embed_metadata on the id-only template fetches detail for the EXIF fields', async () => {
     mockFetch.mockImplementation(() => Promise.resolve(new Response(new Uint8Array(tinyJpeg()), {
       status: 200,
       headers: { 'content-type': 'image/jpeg', 'content-length': String(tinyJpeg().length), 'last-modified': LASTMOD },
@@ -709,7 +623,7 @@ describe('artsonia_download_artwork — inline cap bookkeeping', () => {
     // Three 20,000-byte images under a 45,000-byte cap: two fit, one does not.
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO(45_000)));
     try {
-      const res = await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
+      const res = await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
       const out = parse(res);
       expect(out.downloaded_count).toBe(2);
       expect(out.omitted_count).toBe(1);
@@ -732,7 +646,7 @@ describe('artsonia_download_artwork — inline cap bookkeeping', () => {
       Promise.resolve(p === '/members/' ? MEMBERS_MATCHING : htmlByPath(p))) as never);
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO(45_000)));
     try {
-      const out = parse(await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      const out = parse(await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
       expect(out.omitted_count).toBe(1);
       expect(out.count_check).toEqual({ expected: 3, on_disk: 3, ok: true });
       expect(out).not.toHaveProperty('warning');
@@ -742,7 +656,7 @@ describe('artsonia_download_artwork — inline cap bookkeeping', () => {
   it('carries no omitted fields when everything fit', async () => {
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new InlineDownloadIO()));
     try {
-      const out = parse(await callConfirmed(h, 'artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
+      const out = parse(await h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' }));
       expect(out.downloaded_count).toBe(3);
       expect(out).not.toHaveProperty('omitted_count');
       expect(out).not.toHaveProperty('omitted');
@@ -792,23 +706,6 @@ describe('artsonia_download_artwork — image fetch deadline & cancellation', ()
       expect(out.downloaded_count).toBe(2);
       expect(out.failed_count).toBe(1);
       expect(out.failed[0]).toMatchObject({ artwork_id: '300', reason: 'timed out after 30s' });
-    } finally {
-      await h.close();
-    }
-  });
-
-  it('preview HEAD probes carry a deadline too (a stalled probe just drops its estimate)', async () => {
-    const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])));
-    try {
-      mockFetch.mockImplementation(((url: string, init?: RequestInit) =>
-        String(url).includes('300') ? stalledFetch(init) : Promise.resolve(imageResponse())) as never);
-      const call = h.callTool('artsonia_download_artwork', { artist_id: '1', dest: dir, filename_template: '{artwork_id}' });
-      await until(() => mockFetch.mock.calls.length === 3 && timeouts.length >= 3);
-      for (const ac of timeouts) ac.abort(new DOMException('timeout', 'TimeoutError'));
-      const out = parse(await call);
-      expect(out.status).toBe('confirmation-required');
-      expect(out.preview.estimated_total_bytes).toBe(40_000);
-      for (const [, init] of mockFetch.mock.calls) expect((init as RequestInit).signal).toBeInstanceOf(AbortSignal);
     } finally {
       await h.close();
     }

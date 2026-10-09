@@ -1,11 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
-  CONFIRM_FLOW_SENTENCE,
   NumericIdString,
   UNTRUSTED_DESCRIPTION_SUFFIX,
-  confirmTokenParam,
-  confirmWrite,
   minifiedResult,
   toolAnnotations,
   untrustedResult,
@@ -44,29 +41,19 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     {
       title: 'Mark a student\'s feedback as read',
       description:
-        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). " + CONFIRM_FLOW_SENTENCE,
+        "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). Runs immediately, with no confirmation step: it only changes the read state in your own view.",
       // Destructive by the inverse test: nothing in this tool set marks feedback
       // unread again, and it marks ALL of the student's feedback at once.
       annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
-        confirmToken: confirmTokenParam,
       }),
     },
-    async ({ artist_id, confirmToken }, ctx) => {
+    // Ungated (chrischall/fleet-audit#1154): it only flips the read state in the
+    // parent's own view, so a confirmation round trip is friction, not safety.
+    async ({ artist_id }) => {
       const path = `/members/feedback/default.asp?artist=${artist_id}`;
       const body = new URLSearchParams({ ConfirmAsRead: 'Mark as Read' }).toString();
-      const gate = await confirmWrite(ctx, {
-        tool: 'artsonia_mark_feedback_read',
-        action: 'artsonia.mark_feedback_read',
-        message: "Review and confirm marking ALL of this student's teacher feedback as read:",
-        account: client.confirmAccount,
-        target: artist_id,
-        request: { method: 'POST', path, body: { ConfirmAsRead: 'Mark as Read' } },
-        preview: { note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },
-        confirmToken,
-      });
-      if (gate) return gate;
       const res = await client.write(path, body);
       // A 3xx doesn't prove the mark-all stuck (Artsonia 302s even on payloads it
       // drops). Re-read the feedback page and confirm nothing is still unread.

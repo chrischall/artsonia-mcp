@@ -157,16 +157,17 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
     'artsonia_set_notifications',
     {
       title: 'Set notification preferences',
-      description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. " + CONFIRM_FLOW_SENTENCE + " The preview shows the resulting opt-in state.",
+      description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. Runs immediately, with no confirmation step, then re-reads the profile to verify the change stuck.",
       annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true, destructive: false }),
       inputSchema: z.object({
         news: z.boolean().optional().describe('OptInNews — general Artsonia news emails.'),
         artist_activity: z.boolean().optional().describe('OptInArtistActivity — emails about your student(s) activity.'),
         promos: z.boolean().optional().describe('OptInPromos — promotional/keepsake emails.'),
-        confirmToken: confirmTokenParam,
       }),
     },
-    async ({ news, artist_activity, promos, confirmToken }, ctx) => {
+    // Ungated (chrischall/fleet-audit#1154): reversible (flip the opt-in back),
+    // and the profile re-save is browser-faithful since fleet-audit#363.
+    async ({ news, artist_activity, promos }) => {
       const desired: Record<string, boolean | undefined> = { news, artist_activity, promos };
       if (news === undefined && artist_activity === undefined && promos === undefined) {
         return minifiedResult({ error: 'Specify at least one of news / artist_activity / promos.' });
@@ -195,24 +196,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         OptInArtistActivity: nextChecks['OptInArtistActivity'] ?? false,
         OptInPromos: nextChecks['OptInPromos'] ?? false,
       };
-      // The profile read above runs on every call, so the token binds the exact
-      // form that will be re-sent: a profile edited between preview and
-      // confirmation is refused as DRAFT_CHANGED rather than overwritten.
       const body = params.toString();
-      const gate = await confirmWrite(ctx, {
-        tool: 'artsonia_set_notifications',
-        action: 'artsonia.set_notifications',
-        message: 'Review and confirm these notification settings:',
-        account: client.confirmAccount,
-        target: '/members/profile/',
-        // The whole re-sent form is bound; the preview shows only the resulting
-        // opt-in state (the form also carries the account's name/email).
-        request: { method: 'POST', path: '/members/profile/default.asp', body },
-        willSend: resultingOptIns,
-        preview: { note: 'Re-sends your full profile (name/email preserved, password blanked) to flip only the opt-in(s).' },
-        confirmToken,
-      });
-      if (gate) return gate;
       const res = await client.write('/members/profile/default.asp', body);
       // Artsonia 302s on a subtly-wrong payload but persists NOTHING, so a 3xx
       // is not proof of success. Re-read the profile and confirm the opt-ins

@@ -23,12 +23,12 @@ afterAll(async () => { if (harness) await harness.close(); });
 restoreConfirmEnvAfterEach();
 
 describe('write tools', () => {
-  it('setup + registers three tools, each taking confirmToken and no confirm', async () => {
+  it('setup + registers three tools; post_comment and invite_fan take confirmToken and no confirm', async () => {
     harness = await createTestHarness((s) => registerWriteTools(s, client));
     const { tools } = await harness.client.listTools();
     const names = tools.map((t) => t.name);
     expect(names).toEqual(expect.arrayContaining(['artsonia_post_comment', 'artsonia_invite_fan', 'artsonia_set_notifications']));
-    for (const t of tools) {
+    for (const t of tools.filter((x) => x.name !== 'artsonia_set_notifications')) {
       const props = Object.keys(t.inputSchema.properties ?? {});
       expect(props).toContain('confirmToken');
       expect(props).not.toContain('confirm');
@@ -125,26 +125,23 @@ describe('write tools', () => {
     expect(out.note).toMatch(/cannot confirm|verify/i);
   });
 
-  it('set_notifications still refuses an empty request before any read or prompt', async () => {
+  it('set_notifications takes no confirmToken and asks for no confirmation (fleet-audit#1154)', async () => {
+    const t = (await harness.client.listTools()).tools.find((x) => x.name === 'artsonia_set_notifications')!;
+    expect(Object.keys(t.inputSchema.properties ?? {}).sort()).toEqual(['artist_activity', 'news', 'promos']);
+    expect(t.description).not.toMatch(/confirmToken/);
+  });
+
+  it('set_notifications still refuses an empty request before any read', async () => {
     const out = parse(await harness.callTool('artsonia_set_notifications', {}));
     expect(out.error).toMatch(/at least one/);
     expect(mockFetchHtml).not.toHaveBeenCalled();
     expect(mockWrite).not.toHaveBeenCalled();
   });
-  it('set_notifications phase 1 previews the resulting opt-in state without writing', async () => {
-    mockFetchHtml.mockResolvedValue(profile as never);
-    const out = await phaseOne(harness, 'artsonia_set_notifications', { artist_activity: false });
-    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/profile/default.asp' });
-    // Shows the resulting opt-in state, not the re-sent form (which carries name/email).
-    expect(out.preview.willSend).toEqual({ OptInNews: expect.any(Boolean), OptInArtistActivity: false, OptInPromos: expect.any(Boolean) });
-    expect(out.preview.note).toMatch(/password blanked/);
-    expect(mockWrite).not.toHaveBeenCalled();
-  });
-  it('set_notifications phase 2 re-sends the whole profile once, flips only the chosen opt-in, blanks passwords', async () => {
-    // Phase-1 read, phase-2 fresh read, then the verifying re-read showing News now checked.
+  it('set_notifications re-sends the whole profile once in one call, flips only the chosen opt-in, blanks passwords', async () => {
+    // The profile read, then the verifying re-read showing News now checked.
     const after = profile.replace(/name="OptInNews" value="Y"/, 'name="OptInNews" value="Y" checked');
-    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
-    await callConfirmed(harness, 'artsonia_set_notifications', { news: true });
+    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
+    await harness.callTool( 'artsonia_set_notifications', { news: true });
     expect(mockWrite).toHaveBeenCalledTimes(1);
     const [path, body] = mockWrite.mock.calls[0];
     expect(path).toBe('/members/profile/default.asp');
@@ -156,22 +153,12 @@ describe('write tools', () => {
     expect(params.get('NewPassword')).toBe('');           // password blanked
     expect(params.get('DidChangePassword')).toBe('N');    // preserved (no password change)
   });
-  it('set_notifications refuses the token when the profile changed between phases (DRAFT_CHANGED), without writing', async () => {
-    const renamed = profile.replace(/value="Chris"/, 'value="Christopher"');
-    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(renamed as never);
-    const { confirmToken } = await phaseOne(harness, 'artsonia_set_notifications', { news: true });
-    const res = await harness.callTool('artsonia_set_notifications', { news: true, confirmToken });
-    expect(res.isError).toBe(true);
-    expect(parse(res).error).toBe('DRAFT_CHANGED');
-    expect(mockWrite).not.toHaveBeenCalled();
-  });
-
   it('set_notifications re-reads after the write and reports verified when the opt-in actually flipped', async () => {
     const after = profile.replace(/name="OptInNews" value="Y"/, 'name="OptInNews" value="Y" checked');
-    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
-    const out = parse(await callConfirmed(harness, 'artsonia_set_notifications', { news: true }));
-    expect(mockFetchHtml).toHaveBeenCalledTimes(3);                  // phase-1 read + phase-2 read + verifying re-read
-    expect(mockFetchHtml.mock.calls[2][0]).toBe('/members/profile/');
+    mockFetchHtml.mockResolvedValueOnce(profile as never).mockResolvedValueOnce(after as never);
+    const out = parse(await harness.callTool('artsonia_set_notifications', { news: true }));
+    expect(mockFetchHtml).toHaveBeenCalledTimes(2);                  // profile read + verifying re-read
+    expect(mockFetchHtml.mock.calls[1][0]).toBe('/members/profile/');
     expect(out.verified).toBe(true);
     expect(out.updated).toBe(true);
     expect(out.optIns.OptInNews).toBe(true);
@@ -179,7 +166,7 @@ describe('write tools', () => {
 
   it('set_notifications reports NOT verified when Artsonia 302s but the re-read shows no change persisted', async () => {
     mockFetchHtml.mockResolvedValue(profile as never); // every read, incl. the re-read, still shows News unchecked
-    const out = parse(await callConfirmed(harness, 'artsonia_set_notifications', { news: true }));
+    const out = parse(await harness.callTool('artsonia_set_notifications', { news: true }));
     expect(out.verified).toBe(false);
     expect(out.updated).toBe(false);
     expect(out.optIns.OptInNews).toBe(false);                       // re-read truth, not the request

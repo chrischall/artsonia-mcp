@@ -189,9 +189,8 @@ describe('artsonia_download_artwork on the inline IO', () => {
         artist_id: '1', dest: '/tmp/x', filename_template: '{artwork_id}', limit: 1,
       }),
     ]);
-    // One IO per handler invocation (the confirm round trip re-invokes the
-    // handler, so each call may build more than one) — never a shared instance.
-    expect(built.length).toBeGreaterThanOrEqual(2);
+    // One IO per handler invocation — never a shared instance.
+    expect(built.length).toBe(2);
     expect(new Set(built).size).toBe(built.length);
     // Each result carries exactly its own images, whichever order they finished in.
     expect([imageBlocks(a).length, imageBlocks(b).length].sort()).toEqual([1, 2]);
