@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.0](https://github.com/chrischall/artsonia-mcp/compare/v1.2.5...v1.3.0) (2026-10-09)
+
+
+### Features
+
+* **tools:** run feedback, notification and download tools without a confirm step ([#221](https://github.com/chrischall/artsonia-mcp/issues/221)) ([2f56f8a](https://github.com/chrischall/artsonia-mcp/commit/2f56f8aa329b42b50cd86735921fe7c5771f55b3))
+
+
+### Bug Fixes
+
+* annotate tools truthfully and sync manifests with the served tools ([#218](https://github.com/chrischall/artsonia-mcp/issues/218)) ([cd0e464](https://github.com/chrischall/artsonia-mcp/commit/cd0e464787e55dc5ede3bbcd7fdf2aa8f5e99215))
+* declare the plugin MCP config under the mcpServers key Claude Code reads ([#220](https://github.com/chrischall/artsonia-mcp/issues/220)) ([b5d623a](https://github.com/chrischall/artsonia-mcp/commit/b5d623a9c24f30a1bf1cabce9bc3844fc7b5a0b9))
+* **deps:** bump the production-dependencies group with 2 updates ([#225](https://github.com/chrischall/artsonia-mcp/issues/225)) ([8f7b392](https://github.com/chrischall/artsonia-mcp/commit/8f7b3925fc3754cec4878f164ae3ad998e722d2f))
+* **deps:** update @chrischall/mcp-utils to 3.0.0 ([#217](https://github.com/chrischall/artsonia-mcp/issues/217)) ([6b5746f](https://github.com/chrischall/artsonia-mcp/commit/6b5746ff512a20ee8fd84b1f26f8a86e1de0b3c1))
+* resolve low-severity audit findings ([#214](https://github.com/chrischall/artsonia-mcp/issues/214)) ([8ff5423](https://github.com/chrischall/artsonia-mcp/commit/8ff54232cccfee70c1bab991e90fdd9a74caba0f))
+
+
+### Documentation
+
+* **download:** say InlineDownloadIO is one instance per invocation ([#216](https://github.com/chrischall/artsonia-mcp/issues/216)) ([7ee17ad](https://github.com/chrischall/artsonia-mcp/commit/7ee17ad9076969455b711a1c6095e636ac49cfe2))
+
 ## [1.2.5](https://github.com/chrischall/artsonia-mcp/compare/v1.2.4...v1.2.5) (2026-10-07)
 
 
