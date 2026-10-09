@@ -212,6 +212,20 @@ const IMAGE_FETCH_TIMEOUT_MS = 30_000;
 const imageFetchSignal = (): AbortSignal =>
   withAmbientCancellation(AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS)) as AbortSignal;
 
+/**
+ * The image's source date from its Last-Modified header, parsed defensively: a
+ * missing or malformed header yields null (the caller falls back to
+ * download-time) rather than failing the download.
+ */
+function sourceDateOf(res: Response): Date | null {
+  const lastMod = res.headers.get('last-modified');
+  const parsed = lastMod ? new Date(lastMod) : null;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+}
+
+/** YYYY-MM-DD of a source date, or '' when unknown. */
+const isoDay = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
+
 /** Per-item failure reason, naming a deadline expiry plainly. */
 const failureReason = (e: unknown): string =>
   e instanceof Error && e.name === 'TimeoutError' ? `timed out after ${IMAGE_FETCH_TIMEOUT_MS / 1000}s` : messageOf(e);
@@ -447,18 +461,37 @@ export function registerDownloadTools(
           let file = deferredNaming ? null : fileOf(it, '');
           if (file && skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
 
-          const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { signal: imageFetchSignal() });
-          if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
+          // {date}/{school_year} names need the image's Last-Modified. On a
+          // skip_existing re-run, read it with a HEAD probe first so an item
+          // already on disk is skipped without starting a full image transfer
+          // (chrischall/fleet-audit#362). A failed probe falls through to the GET.
+          if (!file && skip_existing) {
+            try {
+              const head = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD', signal: imageFetchSignal() });
+              if (head.ok) {
+                const probed = fileOf(it, isoDay(sourceDateOf(head)));
+                if (io.exists(probed)) return { kind: 'skipped', artwork_id: it.artwork_id, file: probed };
+              }
+            } catch {
+              /* probe unavailable — the GET below decides */
+            }
+          }
 
-          // Parse Last-Modified defensively — a malformed header must NOT fail the
-          // download; it just falls back to download-time.
-          const lastMod = res.headers.get('last-modified');
-          const parsed = lastMod ? new Date(lastMod) : null;
-          const sourceDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
-          const date = sourceDate ? sourceDate.toISOString().slice(0, 10) : '';
+          const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { signal: imageFetchSignal() });
+          if (!res.ok) {
+            await res.body?.cancel().catch(() => {});
+            return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
+          }
+
+          const sourceDate = sourceDateOf(res);
+          const date = isoDay(sourceDate);
           if (!file) {
             file = fileOf(it, date);
-            if (skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+            if (skip_existing && io.exists(file)) {
+              // Release the unread body (and its socket) rather than leave it for GC.
+              await res.body?.cancel().catch(() => {});
+              return { kind: 'skipped', artwork_id: it.artwork_id, file };
+            }
           }
 
           let buf: Buffer = Buffer.from(await res.arrayBuffer());

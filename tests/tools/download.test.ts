@@ -536,6 +536,47 @@ describe('artsonia_download_artwork', () => {
     expect(readdirSync(join(dir, '2021-2022')).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
   });
 
+  it('{date}/{school_year} re-runs skip existing files with a HEAD probe, never a full image GET (fleet-audit#362)', async () => {
+    const args = { artist_id: '1', dest: dir, path_template: '{school_year}', filename_template: '{date} {artwork_id}' };
+    await confirmed.callTool('artsonia_download_artwork', args);
+    mockFetch.mockClear();
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.skipped_count).toBe(3);
+    expect(out.downloaded_count).toBe(0);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods).toEqual(['HEAD', 'HEAD', 'HEAD']);
+  });
+
+  it('{date} re-run whose HEAD probe fails falls back to GET and cancels the unread body of a skipped item', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}' };
+    await confirmed.callTool('artsonia_download_artwork', args);
+    const cancels: number[] = [];
+    mockFetch.mockImplementation((_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'HEAD') return Promise.reject(new Error('HEAD blocked'));
+      const body = new ReadableStream({ cancel: () => { cancels.push(1); } });
+      return Promise.resolve(new Response(body, { status: 200, headers: { 'last-modified': LASTMOD } }));
+    });
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.skipped_count).toBe(3);
+    expect(cancels).toHaveLength(3);
+  });
+
+  it('{date} run with skip_existing:false makes no HEAD probe', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}', skip_existing: false };
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.downloaded_count).toBe(3);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods).not.toContain('HEAD');
+  });
+
+  it('{date} run where the HEAD probe says the file is missing downloads it with one GET', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}' };
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.downloaded_count).toBe(3);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods.filter((m) => m === 'GET')).toHaveLength(3);
+  });
+
   it('path_template re-runs are idempotent: skip_existing skips across template paths (no re-fetch)', async () => {
     await confirmed.callTool('artsonia_download_artwork', {
       artist_id: '1', dest: dir, path_template: '{grade}/{project}',
