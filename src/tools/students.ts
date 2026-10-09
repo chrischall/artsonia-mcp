@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
+import { UNTRUSTED_DESCRIPTION_SUFFIX, minifiedResult, toolAnnotations, untrustedResult } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseStudents, parseNotifications } from '../parse.js';
 
@@ -17,9 +17,9 @@ export function registerStudentTools(server: McpServer, client: ArtsoniaClient):
     'artsonia_get_activity',
     {
       title: 'Get account notifications',
-      description: 'Return the notification/activity feed on the parent dashboard (e.g. new teacher feedback, fan-club prompts), with a count and the list of notices.',
+      description: 'Return the notification/activity feed on the parent dashboard (e.g. new teacher feedback, fan-club prompts), with a count and the list of notices. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get account notifications', openWorld: true }),
     },
-    async () => minifiedResult(parseNotifications(await client.fetchHtml('/members/'))),
+    async () => untrustedResult(parseNotifications(await client.fetchHtml('/members/'))),
   );
 }
