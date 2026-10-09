@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
-import { registerWriteTools } from '../../src/tools/writes.js';
+import { registerWriteTools, parseProfileForm } from '../../src/tools/writes.js';
 import { client } from '../../src/client.js';
 import {
   ACCEPT, DECLINE, callConfirmed, createTestHarness, parseResult as parse, phaseOne, restoreConfirmEnvAfterEach,
@@ -185,5 +185,43 @@ describe('write tools', () => {
     expect(out.optIns.OptInNews).toBe(false);                       // re-read truth, not the request
     expect(out.note).toMatch(/did not persist|not change/i);
     expect(out.requested.OptInNews).toBe(true);                    // what we asked for, surfaced honestly
+  });
+});
+
+describe('parseProfileForm serialises like a browser (fleet-audit#363)', () => {
+  const form = (inner: string) => `<form id="TheForm">${inner}</form>`;
+  it('sends only the CHECKED radio of a group, not the last one', () => {
+    const { fields } = parseProfileForm(form(
+      '<input type="radio" name="Contact" value="email" checked><input type="radio" name="Contact" value="sms">',
+    ));
+    expect(fields).toEqual({ Contact: 'email' });
+  });
+  it('omits a radio group with nothing checked', () => {
+    const { fields } = parseProfileForm(form('<input type="radio" name="Role" value="a"><input type="radio" name="Role" value="b">'));
+    expect(fields).not.toHaveProperty('Role');
+  });
+  it('skips submit/button/image/reset/file inputs and disabled controls', () => {
+    const { fields, checkboxes } = parseProfileForm(form(
+      '<input type="submit" name="Save" value="Save">' +
+      '<input type="button" name="Btn" value="x">' +
+      '<input type="image" name="Img" src="x.png">' +
+      '<input type="reset" name="Reset" value="r">' +
+      '<input type="file" name="Upload">' +
+      '<input type="text" name="Locked" value="v" disabled>' +
+      '<input type="checkbox" name="OffBox" value="Y" checked disabled>' +
+      '<select name="Gone" disabled><option value="1" selected>1</option></select>' +
+      '<input type="text" name="FirstName" value="Ann">',
+    ));
+    expect(fields).toEqual({ FirstName: 'Ann' });
+    expect(checkboxes).toEqual({});
+  });
+  it('matches the input type case-insensitively', () => {
+    const { fields, checkboxes } = parseProfileForm(form('<input type="CHECKBOX" name="OptInNews" value="Y" checked><input TYPE="Radio" name="R" value="1" checked>'));
+    expect(checkboxes).toEqual({ OptInNews: true });
+    expect(fields).toEqual({ R: '1' });
+  });
+  it('includes textarea contents', () => {
+    const { fields } = parseProfileForm(form('<textarea name="Bio">Hello there</textarea>'));
+    expect(fields).toEqual({ Bio: 'Hello there' });
   });
 });
