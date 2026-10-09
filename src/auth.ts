@@ -69,6 +69,16 @@ export class AuthManager {
   private readonly configError: Error | null;
   private readonly session: CookieSessionManager<ArtsoniaSession, ArtsoniaResponse>;
 
+  /**
+   * The principal confirm tokens bind (chrischall/fleet-audit#986): the login
+   * username, trimmed + lower-cased, or `undefined` when none is configured.
+   * Under a shared MCP_CONFIRM_SECRET this keeps a token minted for one
+   * account's server from verifying in another account's.
+   */
+  get account(): string | undefined {
+    return this.username?.trim().toLowerCase() || undefined;
+  }
+
   constructor(private readonly transport: ArtsoniaTransport, opts: AuthOptions) {
     const username = opts.username ?? readEnvVar('ARTSONIA_USERNAME') ?? null;
     const password = opts.password ?? readEnvVar('ARTSONIA_PASSWORD') ?? null;

@@ -76,6 +76,30 @@ export interface DownloadIO {
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
 export const FETCH_CONCURRENCY = 6;
 const MAX_NAME_LEN = 150;
+/**
+ * Byte cap for one name/path segment. Filesystems (APFS, ext4) limit a name to
+ * 255 BYTES, and a 150-character CJK or emoji title is 450-600 bytes, which
+ * failed every run with ENAMETOOLONG (chrischall/fleet-audit#364). 200 leaves
+ * room for the " (<artwork_id>).jpg" suffix. ASCII names never reach it before
+ * the 150-character cap, so their filenames (and idempotent re-runs) are unchanged.
+ */
+const MAX_NAME_BYTES = 200;
+
+/**
+ * Cap `s` at `maxChars` UTF-16 units and `maxBytes` UTF-8 bytes, cutting only
+ * between characters (never through a surrogate pair or a multi-byte sequence).
+ */
+function capName(s: string, maxChars: number, maxBytes: number): string {
+  let out = '';
+  let bytes = 0;
+  for (const ch of s) {
+    const n = Buffer.byteLength(ch, 'utf8');
+    if (out.length + ch.length > maxChars || bytes + n > maxBytes) break;
+    out += ch;
+    bytes += n;
+  }
+  return out;
+}
 
 /** "Grade 6" / "grade 6" / "6" → "6"; "Grade K" → "k". */
 function normalizeGrade(g: string | null | undefined): string {
@@ -114,7 +138,7 @@ const TOKEN_RE = /\{(title|project|grade|date|school_year|artwork_id)\}/g;
 /**
  * Substitute tokens into one name/path segment and slugify it: collapse the
  * " - " separators left by empty tokens, drop filesystem-unsafe + control
- * chars + leading dots ("." / ".." can never escape dest), trim, cap length.
+ * chars + leading dots ("." / ".." can never escape dest), trim, cap length (characters and UTF-8 bytes).
  */
 function resolveSegment(template: string, tokens: Record<string, string>): string {
   let name = template.replace(TOKEN_RE, (_, k: string) => tokens[k] ?? '');
@@ -124,7 +148,9 @@ function resolveSegment(template: string, tokens: Record<string, string>): strin
   name = name.replace(/^[\s\-_]+|[\s\-_]+$/g, '');
   // Slugify: drop filesystem-unsafe chars + control chars + leading dots; collapse whitespace.
   name = name.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').replace(/^\.+/, '').replace(/\s+/g, ' ').trim();
-  if (name.length > MAX_NAME_LEN) name = name.slice(0, MAX_NAME_LEN).trim();
+  if (name.length > MAX_NAME_LEN || Buffer.byteLength(name, 'utf8') > MAX_NAME_BYTES) {
+    name = capName(name, MAX_NAME_LEN, MAX_NAME_BYTES).trim();
+  }
   return name;
 }
 
@@ -186,6 +212,20 @@ const IMAGE_FETCH_TIMEOUT_MS = 30_000;
 const imageFetchSignal = (): AbortSignal =>
   withAmbientCancellation(AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS)) as AbortSignal;
 
+/**
+ * The image's source date from its Last-Modified header, parsed defensively: a
+ * missing or malformed header yields null (the caller falls back to
+ * download-time) rather than failing the download.
+ */
+function sourceDateOf(res: Response): Date | null {
+  const lastMod = res.headers.get('last-modified');
+  const parsed = lastMod ? new Date(lastMod) : null;
+  return parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
+}
+
+/** YYYY-MM-DD of a source date, or '' when unknown. */
+const isoDay = (d: Date | null): string => (d ? d.toISOString().slice(0, 10) : '');
+
 /** Per-item failure reason, naming a deadline expiry plainly. */
 const failureReason = (e: unknown): string =>
   e instanceof Error && e.name === 'TimeoutError' ? `timed out after ${IMAGE_FETCH_TIMEOUT_MS / 1000}s` : messageOf(e);
@@ -207,7 +247,9 @@ export function registerDownloadTools(
       title: "Download a student's artwork images",
       description:
         "Download full-resolution images of a student's artwork to a local folder, named from the artwork title/project/grade and time-stamped to the image's source date. Optionally filter by class/project (substring), grade, and/or keep only the most-recent N (the portfolio is reliably newest-first). Re-runs are idempotent (skip_existing). Asks the user to confirm first: a confirmation prompt where the client supports one; otherwise the first call returns a preview (the resolved filenames with estimated bytes; nothing is written) and a confirmToken, and only a repeat call with that token proceeds (see MCP_CONFIRM_MODE). write_metadata:true also saves each artwork's comments + teacher feedback as a .json sidecar next to its image. embed_metadata:true embeds title/project/grade/date into each JPEG's EXIF/IPTC. path_template (e.g. \"{grade}/{project}\" or \"{school_year}\") organizes downloads into subfolders for multi-year archives. Note: descriptive filenames need each artwork's detail page (slower) — use filename_template \"{artwork_id}\" for the fast id-only path.",
-      annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: false }),
+      // destructive: skip_existing:false overwrites existing images, write_metadata
+      // overwrites <image>.json sidecars, and write_index overwrites dest/index.json.
+      annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing. Must be inside the allowed download folders: ARTSONIA_OUTPUT_DIR when set, otherwise ~/Downloads or ~/Pictures (on a hosted server, $MCP_DATA_DIR/downloads); anything else is refused before any download.'),
@@ -340,6 +382,7 @@ export function registerDownloadTools(
           artworks: items.slice(0, 200).map((it) => ({ artwork_id: it.artwork_id, filename: filenameOf(it) })),
         },
         tool: 'artsonia_download_artwork',
+        account: client.confirmAccount,
         confirmToken,
         subject: async () => {
           // Sizes come from HEAD probes of the public image CDN — read-only, never a
@@ -418,18 +461,37 @@ export function registerDownloadTools(
           let file = deferredNaming ? null : fileOf(it, '');
           if (file && skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
 
-          const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { signal: imageFetchSignal() });
-          if (!res.ok) return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
+          // {date}/{school_year} names need the image's Last-Modified. On a
+          // skip_existing re-run, read it with a HEAD probe first so an item
+          // already on disk is skipped without starting a full image transfer
+          // (chrischall/fleet-audit#362). A failed probe falls through to the GET.
+          if (!file && skip_existing) {
+            try {
+              const head = await fetch(artworkImageUrl(it.artwork_id, resolution), { method: 'HEAD', signal: imageFetchSignal() });
+              if (head.ok) {
+                const probed = fileOf(it, isoDay(sourceDateOf(head)));
+                if (io.exists(probed)) return { kind: 'skipped', artwork_id: it.artwork_id, file: probed };
+              }
+            } catch {
+              /* probe unavailable — the GET below decides */
+            }
+          }
 
-          // Parse Last-Modified defensively — a malformed header must NOT fail the
-          // download; it just falls back to download-time.
-          const lastMod = res.headers.get('last-modified');
-          const parsed = lastMod ? new Date(lastMod) : null;
-          const sourceDate = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
-          const date = sourceDate ? sourceDate.toISOString().slice(0, 10) : '';
+          const res = await fetch(artworkImageUrl(it.artwork_id, resolution), { signal: imageFetchSignal() });
+          if (!res.ok) {
+            await res.body?.cancel().catch(() => {});
+            return { kind: 'failed', artwork_id: it.artwork_id, reason: `HTTP ${res.status}` };
+          }
+
+          const sourceDate = sourceDateOf(res);
+          const date = isoDay(sourceDate);
           if (!file) {
             file = fileOf(it, date);
-            if (skip_existing && io.exists(file)) return { kind: 'skipped', artwork_id: it.artwork_id, file };
+            if (skip_existing && io.exists(file)) {
+              // Release the unread body (and its socket) rather than leave it for GC.
+              await res.body?.cancel().catch(() => {});
+              return { kind: 'skipped', artwork_id: it.artwork_id, file };
+            }
           }
 
           let buf: Buffer = Buffer.from(await res.arrayBuffer());

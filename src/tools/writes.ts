@@ -13,6 +13,8 @@ import type { ArtsoniaClient } from '../client.js';
 
 const OPTIN_FIELDS = { news: 'OptInNews', artist_activity: 'OptInArtistActivity', promos: 'OptInPromos' } as const;
 const PASSWORD_FIELDS = new Set(['OldPassword', 'NewPassword', 'NewPassword2']);
+/** Input types a browser never includes in a submitted form body. */
+const NEVER_SENT_TYPES = new Set(['submit', 'button', 'image', 'reset', 'file']);
 
 interface ProfileForm {
   fields: Record<string, string>;
@@ -27,18 +29,27 @@ export function parseProfileForm(html: string): ProfileForm {
   const fields: Record<string, string> = {};
   const checkboxes: Record<string, boolean> = {};
   const checkboxValues: Record<string, string> = {};
-  for (const el of form.querySelectorAll('input, select')) {
+  // Mirror browser form serialisation (chrischall/fleet-audit#363): a radio is
+  // sent only when checked, buttons/files and disabled controls are never sent,
+  // and `type` is matched case-insensitively.
+  for (const el of form.querySelectorAll('input, select, textarea')) {
     const name = el.getAttribute('name');
-    if (!name) continue;
-    const type = (el.getAttribute('type') ?? el.tagName.toLowerCase());
+    if (!name || el.hasAttribute('disabled')) continue;
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute('type') ?? tag).toLowerCase();
+    if (NEVER_SENT_TYPES.has(type)) continue;
     if (type === 'checkbox') {
       checkboxes[name] = el.hasAttribute('checked');
       // Artsonia opt-in checkboxes submit value="Y" when checked — a literal "on"
       // is silently ignored by the server (the save 302s but persists nothing).
       checkboxValues[name] = el.getAttribute('value') ?? 'Y';
-    } else if (el.tagName.toLowerCase() === 'select') {
+    } else if (type === 'radio') {
+      if (el.hasAttribute('checked')) fields[name] = el.getAttribute('value') ?? 'on';
+    } else if (tag === 'select') {
       const sel = el.querySelector('option[selected]') ?? el.querySelector('option');
       fields[name] = sel?.getAttribute('value') ?? '';
+    } else if (tag === 'textarea') {
+      fields[name] = el.text;
     } else {
       fields[name] = el.getAttribute('value') ?? '';
     }
@@ -66,8 +77,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_post_comment',
         action: 'artsonia.post_comment',
         message: 'Review and confirm this comment before it is posted:',
-        // One signed-in Artsonia account per server process.
-        account: undefined,
+        account: client.confirmAccount,
         target: artwork_id,
         request: { method: 'POST', path, body: { Comment: comment } },
         preview: { artist_id, artwork_id },
@@ -121,7 +131,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_invite_fan',
         action: 'artsonia.invite_fan',
         message: 'Review and confirm this fan invite (it emails the address below):',
-        account: undefined,
+        account: client.confirmAccount,
         target: artist_id,
         request: { method: 'POST', path, body: Object.fromEntries(params) },
         preview: {
@@ -193,7 +203,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_set_notifications',
         action: 'artsonia.set_notifications',
         message: 'Review and confirm these notification settings:',
-        account: undefined,
+        account: client.confirmAccount,
         target: '/members/profile/',
         // The whole re-sent form is bound; the preview shows only the resulting
         // opt-in state (the form also carries the account's name/email).

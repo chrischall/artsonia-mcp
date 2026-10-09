@@ -104,6 +104,23 @@ describe('buildFilename', () => {
     expect(buildFilename('{grade} - {project} - {title}', { grade: null, project: '', title: 'Solo' }, '42')).toBe('Solo (42).jpg');
     expect(buildFilename('{grade} - {project} - {title}', { grade: '6', project: '', title: '' }, '42')).toBe('Grade 6 (42).jpg');
   });
+  it('keeps a long non-ASCII name under the 255-byte filename limit (fleet-audit#364)', () => {
+    for (const ch of ['水', '🎨', 'é']) {
+      const name = buildFilename('{title}', { title: ch.repeat(150) }, '150567537');
+      expect(Buffer.byteLength(name, 'utf8')).toBeLessThanOrEqual(255);
+      expect(name.endsWith(' (150567537).jpg')).toBe(true);
+      // Truncation never splits a character (no lone surrogate, no U+FFFD).
+      expect(name).not.toMatch(/[\uD800-\uDFFF]/u);
+      expect(name.startsWith(ch.repeat(10))).toBe(true);
+    }
+    // Path segments share the cap.
+    for (const seg of buildRelPath('{project}', { project: '水'.repeat(150) }, '1')) {
+      expect(Buffer.byteLength(seg, 'utf8')).toBeLessThanOrEqual(255);
+    }
+  });
+  it('leaves an ASCII title capped at 150 characters, as before (re-runs stay idempotent)', () => {
+    expect(buildFilename('{title}', { title: 'a'.repeat(160) }, '1')).toBe(`${'a'.repeat(150)} (1).jpg`);
+  });
   it('all-empty → just the artwork_id', () => {
     expect(buildFilename('{grade} - {project} - {title}', {}, '999')).toBe('999.jpg');
   });
@@ -157,6 +174,11 @@ describe('artsonia_download_artwork', () => {
     expect(props).toContain('confirmToken');
     expect(props).not.toContain('confirm');
     expect(tools[0].description).toMatch(/confirmToken/);
+  });
+
+  it('is annotated destructive: it can overwrite existing images, sidecars and index.json (fleet-audit#365)', async () => {
+    const { tools } = await harness.client.listTools();
+    expect(tools[0].annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
   it('phase 2 with the returned token downloads exactly once', async () => {
@@ -512,6 +534,47 @@ describe('artsonia_download_artwork', () => {
     expect(out.downloaded_count).toBe(3);
     // LASTMOD is 2022-03-18 → school year 2021-2022.
     expect(readdirSync(join(dir, '2021-2022')).sort()).toEqual(['100.jpg', '200.jpg', '300.jpg']);
+  });
+
+  it('{date}/{school_year} re-runs skip existing files with a HEAD probe, never a full image GET (fleet-audit#362)', async () => {
+    const args = { artist_id: '1', dest: dir, path_template: '{school_year}', filename_template: '{date} {artwork_id}' };
+    await confirmed.callTool('artsonia_download_artwork', args);
+    mockFetch.mockClear();
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.skipped_count).toBe(3);
+    expect(out.downloaded_count).toBe(0);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods).toEqual(['HEAD', 'HEAD', 'HEAD']);
+  });
+
+  it('{date} re-run whose HEAD probe fails falls back to GET and cancels the unread body of a skipped item', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}' };
+    await confirmed.callTool('artsonia_download_artwork', args);
+    const cancels: number[] = [];
+    mockFetch.mockImplementation((_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'HEAD') return Promise.reject(new Error('HEAD blocked'));
+      const body = new ReadableStream({ cancel: () => { cancels.push(1); } });
+      return Promise.resolve(new Response(body, { status: 200, headers: { 'last-modified': LASTMOD } }));
+    });
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.skipped_count).toBe(3);
+    expect(cancels).toHaveLength(3);
+  });
+
+  it('{date} run with skip_existing:false makes no HEAD probe', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}', skip_existing: false };
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.downloaded_count).toBe(3);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods).not.toContain('HEAD');
+  });
+
+  it('{date} run where the HEAD probe says the file is missing downloads it with one GET', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{date} {artwork_id}' };
+    const out = parse(await confirmed.callTool('artsonia_download_artwork', args));
+    expect(out.downloaded_count).toBe(3);
+    const methods = mockFetch.mock.calls.map(([, init]) => (init as RequestInit)?.method ?? 'GET');
+    expect(methods.filter((m) => m === 'GET')).toHaveLength(3);
   });
 
   it('path_template re-runs are idempotent: skip_existing skips across template paths (no re-fetch)', async () => {

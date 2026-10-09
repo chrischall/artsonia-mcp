@@ -1,6 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { NumericIdString, mapWithConcurrency, minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
+import {
+  NumericIdString,
+  UNTRUSTED_DESCRIPTION_SUFFIX,
+  mapWithConcurrency,
+  minifiedResult,
+  toolAnnotations,
+  untrustedResult,
+} from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parsePortfolio, parseArtwork } from '../parse.js';
 import { FETCH_CONCURRENCY } from './download.js';
@@ -11,7 +18,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
     {
       title: "Get a student's portfolio",
       description:
-        "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students. Set include_details:true to also fetch each artwork's full detail (title, project, grade, views, …) in one call — this fetches a detail page per artwork (slower), so leave it off when the lean tiles are enough.",
+        "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students. Set include_details:true to also fetch each artwork's full detail (title, project, grade, views, …) in one call — this fetches a detail page per artwork (slower), so leave it off when the lean tiles are enough. " + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: "Get a student's portfolio", openWorld: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
@@ -33,30 +40,31 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
         const { comments: _comments, comment_entry: _commentEntry, ...scalar } = detail;
         return { ...tile, ...scalar };
       });
-      return minifiedResult({ artist_id, artworks });
+      // Detail rows carry titles/project names typed by students and teachers.
+      return untrustedResult({ artist_id, artworks });
     },
   );
   server.registerTool(
     'artsonia_get_artwork',
     {
       title: 'Get artwork detail',
-      description: 'Get one artwork: title, artist screen-name, view count, project (assignment name), and the comments on it. Pass an artwork_id from a portfolio.',
+      description: 'Get one artwork: title, artist screen-name, view count, project (assignment name), and the comments on it. Pass an artwork_id from a portfolio. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get artwork detail', openWorld: true }),
       inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
-    async ({ artwork_id }) => minifiedResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
+    async ({ artwork_id }) => untrustedResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
   );
   server.registerTool(
     'artsonia_list_comments',
     {
       title: 'List comments on an artwork',
-      description: 'List the comments on a given artwork (author + text). Pass an artwork_id from a portfolio.',
+      description: 'List the comments on a given artwork (author + text). Pass an artwork_id from a portfolio. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'List comments on an artwork', openWorld: true }),
       inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
     async ({ artwork_id }) => {
       const detail = parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`));
-      return minifiedResult({ artwork_id, comments: detail.comments });
+      return untrustedResult({ artwork_id, comments: detail.comments });
     },
   );
 }

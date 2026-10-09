@@ -3,10 +3,12 @@ import { z } from 'zod';
 import {
   CONFIRM_FLOW_SENTENCE,
   NumericIdString,
+  UNTRUSTED_DESCRIPTION_SUFFIX,
   confirmTokenParam,
   confirmWrite,
   minifiedResult,
   toolAnnotations,
+  untrustedResult,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
@@ -23,13 +25,13 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
     {
       title: 'Get teacher feedback for a student',
       description:
-        "List the teacher feedback left on a student's artwork — each item's message, who posted it and when, the artwork it's about, and whether it's been marked as read. Pass the artist_id from artsonia_list_students.",
+        "List the teacher feedback left on a student's artwork — each item's message, who posted it and when, the artwork it's about, and whether it's been marked as read. Pass the artist_id from artsonia_list_students. " + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get teacher feedback for a student', readOnly: true, openWorld: true }),
       inputSchema: z.object({ artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).') }),
     },
     async ({ artist_id }) => {
       const feedback = parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`));
-      return minifiedResult({
+      return untrustedResult({
         artist_id,
         unread_count: feedback.filter((f) => !f.is_read).length,
         feedback,
@@ -56,8 +58,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
         tool: 'artsonia_mark_feedback_read',
         action: 'artsonia.mark_feedback_read',
         message: "Review and confirm marking ALL of this student's teacher feedback as read:",
-        // One signed-in Artsonia account per server process.
-        account: undefined,
+        account: client.confirmAccount,
         target: artist_id,
         request: { method: 'POST', path, body: { ConfirmAsRead: 'Mark as Read' } },
         preview: { note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },
