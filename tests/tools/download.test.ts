@@ -104,6 +104,23 @@ describe('buildFilename', () => {
     expect(buildFilename('{grade} - {project} - {title}', { grade: null, project: '', title: 'Solo' }, '42')).toBe('Solo (42).jpg');
     expect(buildFilename('{grade} - {project} - {title}', { grade: '6', project: '', title: '' }, '42')).toBe('Grade 6 (42).jpg');
   });
+  it('keeps a long non-ASCII name under the 255-byte filename limit (fleet-audit#364)', () => {
+    for (const ch of ['水', '🎨', 'é']) {
+      const name = buildFilename('{title}', { title: ch.repeat(150) }, '150567537');
+      expect(Buffer.byteLength(name, 'utf8')).toBeLessThanOrEqual(255);
+      expect(name.endsWith(' (150567537).jpg')).toBe(true);
+      // Truncation never splits a character (no lone surrogate, no U+FFFD).
+      expect(name).not.toMatch(/[\uD800-\uDFFF]/u);
+      expect(name.startsWith(ch.repeat(10))).toBe(true);
+    }
+    // Path segments share the cap.
+    for (const seg of buildRelPath('{project}', { project: '水'.repeat(150) }, '1')) {
+      expect(Buffer.byteLength(seg, 'utf8')).toBeLessThanOrEqual(255);
+    }
+  });
+  it('leaves an ASCII title capped at 150 characters, as before (re-runs stay idempotent)', () => {
+    expect(buildFilename('{title}', { title: 'a'.repeat(160) }, '1')).toBe(`${'a'.repeat(150)} (1).jpg`);
+  });
   it('all-empty → just the artwork_id', () => {
     expect(buildFilename('{grade} - {project} - {title}', {}, '999')).toBe('999.jpg');
   });

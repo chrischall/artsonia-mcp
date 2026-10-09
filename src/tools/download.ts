@@ -76,6 +76,30 @@ export interface DownloadIO {
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
 export const FETCH_CONCURRENCY = 6;
 const MAX_NAME_LEN = 150;
+/**
+ * Byte cap for one name/path segment. Filesystems (APFS, ext4) limit a name to
+ * 255 BYTES, and a 150-character CJK or emoji title is 450-600 bytes, which
+ * failed every run with ENAMETOOLONG (chrischall/fleet-audit#364). 200 leaves
+ * room for the " (<artwork_id>).jpg" suffix. ASCII names never reach it before
+ * the 150-character cap, so their filenames (and idempotent re-runs) are unchanged.
+ */
+const MAX_NAME_BYTES = 200;
+
+/**
+ * Cap `s` at `maxChars` UTF-16 units and `maxBytes` UTF-8 bytes, cutting only
+ * between characters (never through a surrogate pair or a multi-byte sequence).
+ */
+function capName(s: string, maxChars: number, maxBytes: number): string {
+  let out = '';
+  let bytes = 0;
+  for (const ch of s) {
+    const n = Buffer.byteLength(ch, 'utf8');
+    if (out.length + ch.length > maxChars || bytes + n > maxBytes) break;
+    out += ch;
+    bytes += n;
+  }
+  return out;
+}
 
 /** "Grade 6" / "grade 6" / "6" → "6"; "Grade K" → "k". */
 function normalizeGrade(g: string | null | undefined): string {
@@ -114,7 +138,7 @@ const TOKEN_RE = /\{(title|project|grade|date|school_year|artwork_id)\}/g;
 /**
  * Substitute tokens into one name/path segment and slugify it: collapse the
  * " - " separators left by empty tokens, drop filesystem-unsafe + control
- * chars + leading dots ("." / ".." can never escape dest), trim, cap length.
+ * chars + leading dots ("." / ".." can never escape dest), trim, cap length (characters and UTF-8 bytes).
  */
 function resolveSegment(template: string, tokens: Record<string, string>): string {
   let name = template.replace(TOKEN_RE, (_, k: string) => tokens[k] ?? '');
@@ -124,7 +148,9 @@ function resolveSegment(template: string, tokens: Record<string, string>): strin
   name = name.replace(/^[\s\-_]+|[\s\-_]+$/g, '');
   // Slugify: drop filesystem-unsafe chars + control chars + leading dots; collapse whitespace.
   name = name.replace(/[\/\\:*?"<>|\x00-\x1f]/g, '').replace(/^\.+/, '').replace(/\s+/g, ' ').trim();
-  if (name.length > MAX_NAME_LEN) name = name.slice(0, MAX_NAME_LEN).trim();
+  if (name.length > MAX_NAME_LEN || Buffer.byteLength(name, 'utf8') > MAX_NAME_BYTES) {
+    name = capName(name, MAX_NAME_LEN, MAX_NAME_BYTES).trim();
+  }
   return name;
 }
 
