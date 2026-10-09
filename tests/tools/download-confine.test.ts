@@ -13,7 +13,7 @@ import { NodeDownloadIO } from '../../src/tools/download-io.js';
 import { InlineDownloadIO } from '../../src/tools/download-io-inline.js';
 import { DEFAULT_DOWNLOAD_ROOTS, downloadRoots, makeDownloadIO } from '../../src/tools/make-download-io.js';
 import { client } from '../../src/client.js';
-import { ACCEPT, createTestHarness, parseResult, phaseOne, restoreConfirmEnvAfterEach } from '../helpers.js';
+import { ACCEPT, createTestHarness, parseResult, restoreConfirmEnvAfterEach } from '../helpers.js';
 
 const PORTFOLIO = `<div class="grid">
   <div class="grid-item"><div class="grid-item-art"><a href="/museum/art.asp?id=100"><div class="genthumb"></div></a></div></div>
@@ -141,12 +141,11 @@ describe('artsonia_download_artwork — dest confinement (disk IO)', () => {
     expect(readdirSync(join(base, 'out'))).toHaveLength(0);
   });
 
-  it('accepts a new subfolder of a root: the preview creates nothing, the confirmed run creates it', async () => {
+  it('accepts a new subfolder of a root and creates it', async () => {
     const dest = join(root, 'Finn', 'art');
     const h = await tool(() => new NodeDownloadIO([root]));
-    const p1 = await phaseOne(h, 'artsonia_download_artwork', args(dest));
     expect(existsSync(join(root, 'Finn'))).toBe(false);
-    const out = parseResult(await h.callTool('artsonia_download_artwork', { ...args(dest), confirmToken: p1.confirmToken }));
+    const out = parseResult(await h.callTool('artsonia_download_artwork', args(dest)));
     expect(out.downloaded_count).toBe(1);
     expect(readdirSync(dest)).toEqual(['100.jpg']);
   });
@@ -176,8 +175,8 @@ describe('~-prefixed roots (the production default DEFAULT_DOWNLOAD_ROOTS)', () 
 
   it('the tool accepts a ~/Downloads dest and refuses ~/Desktop, with the default roots', async () => {
     const h = await tool(() => new NodeDownloadIO(DEFAULT_DOWNLOAD_ROOTS));
-    const ok = await phaseOne(h, 'artsonia_download_artwork', args('~/Downloads/kid'));
-    expect(ok.confirmToken).toEqual(expect.any(String));
+    const ok = await h.callTool('artsonia_download_artwork', args('~/Downloads/kid'));
+    expect(ok.isError).toBeFalsy();
     const res = await h.callTool('artsonia_download_artwork', args('~/Desktop'));
     expect(res.isError).toBe(true);
     expect((res.content as Array<{ text: string }>)[0].text).toMatch(/~\/Downloads/);
