@@ -18,15 +18,15 @@
       "environmentVariables": [
         {
           "name": "ARTSONIA_USERNAME",
-          "description": "Your Artsonia login email address",
-          "isRequired": true,
+          "description": "Your Artsonia login email address. Required in the default direct mode; not needed when ARTSONIA_TRANSPORT=fetchproxy (the signed-in browser tab carries the session).",
+          "isRequired": false,
           "format": "string",
           "isSecret": false
         },
         {
           "name": "ARTSONIA_PASSWORD",
-          "description": "Your Artsonia account password",
-          "isRequired": true,
+          "description": "Your Artsonia account password. Required in the default direct mode; not needed when ARTSONIA_TRANSPORT=fetchproxy.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true
         },
@@ -45,6 +45,24 @@
         {
           "name": "ARTSONIA_OUTPUT_DIR",
           "description": "Folders artsonia_download_artwork may save into (a path-delimiter list: ':' on macOS/Linux, ';' on Windows). Unset: ~/Downloads and ~/Pictures, or $MCP_DATA_DIR/downloads when MCP_DATA_DIR is set. Any other dest is refused.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ARTSONIA_TRANSPORT",
+          "description": "fetch (default) logs in directly with ARTSONIA_USERNAME/ARTSONIA_PASSWORD; fetchproxy is the optional fallback that rides your signed-in artsonia.com browser tab.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ARTSONIA_WS_PORT",
+          "description": "fetchproxy WebSocket port override (default 37149, a shared fleet port). Only used when ARTSONIA_TRANSPORT=fetchproxy.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "ARTSONIA_INLINE_DOWNLOADS",
+          "description": "1/true/yes/on returns artsonia_download_artwork images inline as base64 image blocks instead of writing them to disk (for hosted deployments); unset/false saves to disk.",
           "isRequired": false,
           "format": "string"
         }
