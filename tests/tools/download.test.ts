@@ -208,6 +208,17 @@ describe('artsonia_download_artwork', () => {
     expect(readdirSync(dir)).toHaveLength(0);
   });
 
+  it('refuses a token replayed with different arguments, even when the resulting payload is identical (mcp-utils 3.0 args binding)', async () => {
+    const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
+    const { confirmToken } = await phaseOne(harness, 'artsonia_download_artwork', args);
+    // limit 5 over a 3-artwork portfolio selects the same artworks, so only the
+    // args binding (not the payload) can tell the two calls apart.
+    const res = await harness.callTool('artsonia_download_artwork', { ...args, limit: 5, confirmToken });
+    expect(res.isError).toBe(true);
+    expect(parse(res).error).toMatch(/^(TOKEN_INVALID|DRAFT_CHANGED)$/);
+    expect(readdirSync(dir)).toHaveLength(0);
+  });
+
   it('writes nothing when the confirmation prompt is declined', async () => {
     const h = await createTestHarness((s) => registerDownloadTools(s, client, () => new NodeDownloadIO([tmpdir()])), DECLINE);
     try {

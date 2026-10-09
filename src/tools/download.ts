@@ -268,7 +268,8 @@ export function registerDownloadTools(
         confirmToken: confirmTokenParam,
       }),
     },
-    async ({ artist_id, dest, project, grade, limit, resolution, filename_template, path_template, set_mtime_from_source, skip_existing, write_index, write_metadata, embed_metadata, include_private, confirmToken }, ctx) => {
+    async (args, ctx) => {
+      const { artist_id, dest, project, grade, limit, resolution, filename_template, path_template, set_mtime_from_source, skip_existing, write_index, write_metadata, embed_metadata, include_private, confirmToken } = args;
       const template = filename_template;
       const templates = `${template}\n${path_template ?? ''}`;
       // {date}/{school_year} anywhere in the name or path → the target path is
@@ -383,6 +384,9 @@ export function registerDownloadTools(
         },
         tool: 'artsonia_download_artwork',
         account: client.confirmAccount,
+        // The validated tool arguments (mcp-utils 3.0 binds both confirmation
+        // rails to them; confirmToken is dropped before hashing).
+        args,
         confirmToken,
         subject: async () => {
           // Sizes come from HEAD probes of the public image CDN — read-only, never a
@@ -453,7 +457,7 @@ export function registerDownloadTools(
       // On disk, create `dest` through mcp-utils' confined resolveOutputDir (it
       // re-checks the roots after mkdir, in case a component was swapped for a
       // symlink since the preview). The inline IO has no disk to create it on.
-      if (roots) resolveOutputDir(dest, 'ARTSONIA_OUTPUT_DIR', { allowedRoots: roots });
+      if (roots) resolveOutputDir(dest, 'ARTSONIA_OUTPUT_DIR', { allowedRoots: roots, name: 'artsonia-mcp' });
       else await io.mkdirp(destDir);
       const outcomes = await mapWithConcurrency(items, FETCH_CONCURRENCY, async (it): Promise<Outcome> => {
         try {
