@@ -340,6 +340,7 @@ export function registerDownloadTools(
           artworks: items.slice(0, 200).map((it) => ({ artwork_id: it.artwork_id, filename: filenameOf(it) })),
         },
         tool: 'artsonia_download_artwork',
+        account: client.confirmAccount,
         confirmToken,
         subject: async () => {
           // Sizes come from HEAD probes of the public image CDN — read-only, never a

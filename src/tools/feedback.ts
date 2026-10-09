@@ -56,8 +56,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
         tool: 'artsonia_mark_feedback_read',
         action: 'artsonia.mark_feedback_read',
         message: "Review and confirm marking ALL of this student's teacher feedback as read:",
-        // One signed-in Artsonia account per server process.
-        account: undefined,
+        account: client.confirmAccount,
         target: artist_id,
         request: { method: 'POST', path, body: { ConfirmAsRead: 'Mark as Read' } },
         preview: { note: "Marks ALL of this student's feedback as read (Artsonia has no per-item control)." },

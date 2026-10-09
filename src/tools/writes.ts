@@ -66,8 +66,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_post_comment',
         action: 'artsonia.post_comment',
         message: 'Review and confirm this comment before it is posted:',
-        // One signed-in Artsonia account per server process.
-        account: undefined,
+        account: client.confirmAccount,
         target: artwork_id,
         request: { method: 'POST', path, body: { Comment: comment } },
         preview: { artist_id, artwork_id },
@@ -121,7 +120,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_invite_fan',
         action: 'artsonia.invite_fan',
         message: 'Review and confirm this fan invite (it emails the address below):',
-        account: undefined,
+        account: client.confirmAccount,
         target: artist_id,
         request: { method: 'POST', path, body: Object.fromEntries(params) },
         preview: {
@@ -193,7 +192,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
         tool: 'artsonia_set_notifications',
         action: 'artsonia.set_notifications',
         message: 'Review and confirm these notification settings:',
-        account: undefined,
+        account: client.confirmAccount,
         target: '/members/profile/',
         // The whole re-sent form is bound; the preview shows only the resulting
         // opt-in state (the form also carries the account's name/email).

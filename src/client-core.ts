@@ -40,6 +40,15 @@ export class ArtsoniaClient {
     this.auth = opts.auth;
   }
 
+  /**
+   * The account confirm tokens bind to (see `AuthManager.account`). Undefined
+   * in browser-session mode: the server holds no username there, and the
+   * signed-in tab is the only principal it can act as.
+   */
+  get confirmAccount(): string | undefined {
+    return this.transport.usesBrowserSession ? undefined : this.auth.account;
+  }
+
   async fetchHtml(path: string): Promise<string> {
     return (await this.requestWithSession('GET', path)).body;
   }
