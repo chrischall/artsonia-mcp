@@ -35,7 +35,12 @@
       "env": {
         "ARTSONIA_USERNAME": "${user_config.artsonia_username}",
         "ARTSONIA_PASSWORD": "${user_config.artsonia_password}",
-        "ARTSONIA_OUTPUT_DIR": "${user_config.artsonia_output_dir}"
+        "ARTSONIA_OUTPUT_DIR": "${user_config.artsonia_output_dir}",
+        "ARTSONIA_TRANSPORT": "${user_config.artsonia_transport}",
+        "ARTSONIA_WS_PORT": "${user_config.artsonia_ws_port}",
+        "ARTSONIA_INLINE_DOWNLOADS": "${user_config.artsonia_inline_downloads}",
+        "ARTSONIA_SESSION_CACHE": "${user_config.artsonia_session_cache}",
+        "ARTSONIA_SESSION_FILE": "${user_config.artsonia_session_file}"
       }
     }
   },
@@ -43,15 +48,15 @@
     "artsonia_username": {
       "type": "string",
       "title": "Artsonia Username",
-      "description": "Your Artsonia login email address",
-      "required": true,
+      "description": "Your Artsonia login email address. Required in the default direct mode; not needed when Transport is fetchproxy (the signed-in browser tab carries the session).",
+      "required": false,
       "sensitive": false
     },
     "artsonia_password": {
       "type": "string",
       "title": "Artsonia Password",
-      "description": "Your Artsonia account password",
-      "required": true,
+      "description": "Your Artsonia account password. Required in the default direct mode; not needed when Transport is fetchproxy.",
+      "required": false,
       "sensitive": true
     },
     "artsonia_output_dir": {
@@ -60,12 +65,45 @@
       "description": "Folders artsonia_download_artwork may save into (separate several with ':'). Leave empty to allow ~/Downloads and ~/Pictures only; any other destination is refused.",
       "required": false,
       "sensitive": false
+    },
+    "artsonia_transport": {
+      "type": "string",
+      "title": "Transport",
+      "description": "fetch (default) logs in directly with your username and password; fetchproxy is the optional fallback that rides your already-signed-in artsonia.com browser tab via the fetchproxy extension.",
+      "required": false,
+      "default": "fetch"
+    },
+    "artsonia_ws_port": {
+      "type": "string",
+      "title": "fetchproxy WebSocket port",
+      "description": "fetchproxy WebSocket port override (default 37149, a shared fleet port). Only used when Transport is fetchproxy.",
+      "required": false
+    },
+    "artsonia_inline_downloads": {
+      "type": "boolean",
+      "title": "Return downloads inline",
+      "description": "When on (1/true/yes/on), artsonia_download_artwork returns the images inline as base64 image blocks instead of writing them to disk; nothing is written, so dest is only a label and is not checked. Off: images are saved to disk.",
+      "required": false,
+      "default": false
+    },
+    "artsonia_session_cache": {
+      "type": "boolean",
+      "title": "Session cache",
+      "description": "Set to false to disable the on-disk session cache and re-authenticate on every process start. Defaults to enabled.",
+      "required": false,
+      "default": true
+    },
+    "artsonia_session_file": {
+      "type": "string",
+      "title": "Session cache file",
+      "description": "Absolute path for the session cache file. Defaults to $MCP_DATA_DIR/.artsonia-mcp/session-<user>.json.",
+      "required": false
     }
   },
   "tools": [
     {
       "name": "artsonia_healthcheck",
-      "description": "Check connectivity and authentication status"
+      "description": "Check that credentials are configured, log in, and report authentication status"
     },
     {
       "name": "artsonia_list_students",
@@ -73,7 +111,7 @@
     },
     {
       "name": "artsonia_get_activity",
-      "description": "Get recent activity feed for a student"
+      "description": "Get the notification/activity feed on the parent dashboard (e.g. new teacher feedback, fan-club prompts)"
     },
     {
       "name": "artsonia_get_portfolio",
@@ -117,11 +155,11 @@
     },
     {
       "name": "artsonia_invite_fan",
-      "description": "Invite someone to become a fan of a student"
+      "description": "Invite someone (by name + email) to follow a student's portfolio — sends them an invite email"
     },
     {
       "name": "artsonia_set_notifications",
-      "description": "Update notification preferences for a student"
+      "description": "Turn the account's email opt-ins on/off (news, artist activity, promos)"
     }
   ],
   "compatibility": {

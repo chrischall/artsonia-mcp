@@ -45,7 +45,9 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       title: 'Mark a student\'s feedback as read',
       description:
         "Mark the student's teacher feedback as read (this is a mark-ALL action — Artsonia has no per-item control). " + CONFIRM_FLOW_SENTENCE,
-      annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: false }),
+      // Destructive by the inverse test: nothing in this tool set marks feedback
+      // unread again, and it marks ALL of the student's feedback at once.
+      annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: true }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         confirmToken: confirmTokenParam,
