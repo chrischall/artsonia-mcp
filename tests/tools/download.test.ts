@@ -159,6 +159,11 @@ describe('artsonia_download_artwork', () => {
     expect(tools[0].description).toMatch(/confirmToken/);
   });
 
+  it('is annotated destructive: it can overwrite existing images, sidecars and index.json (fleet-audit#365)', async () => {
+    const { tools } = await harness.client.listTools();
+    expect(tools[0].annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+
   it('phase 2 with the returned token downloads exactly once', async () => {
     const args = { artist_id: '1', dest: dir, filename_template: '{artwork_id}' };
     const p1 = await phaseOne(harness, 'artsonia_download_artwork', args);
