@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/chrischall/artsonia-mcp/compare/v1.3.0...v1.3.1) (2026-10-10)
+
+
+### Documentation
+
+* make AGENTS.md a symlink to CLAUDE.md ([#226](https://github.com/chrischall/artsonia-mcp/issues/226)) ([b8b189d](https://github.com/chrischall/artsonia-mcp/commit/b8b189d37b5a538432136c26973807c4801d63a5))
+
 ## [1.3.0](https://github.com/chrischall/artsonia-mcp/compare/v1.2.5...v1.3.0) (2026-10-09)
 
 
