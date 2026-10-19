@@ -4,6 +4,17 @@ slug: artsonia
 summary: >-
   Artsonia student-art portfolios, comments, and fans for Claude — access
   via natural language
+examples:
+  - prompt: >-
+      Has my kid's art teacher left any new feedback on Artsonia?
+    note: Reads the teacher feedback on each student's artwork
+  - prompt: >-
+      Show me the latest artwork in my child's Artsonia portfolio and any
+      comments on it
+    note: Read-only portfolio and comment lookup
+  - prompt: >-
+      Who's in my student's Artsonia fan club?
+    note: Lists fan names and relationships
 #
 # Hosting note (a comment, not user-facing summary text): this is a
 # BROWSER-BRIDGE MCP — it reaches its site through the user's signed-in
