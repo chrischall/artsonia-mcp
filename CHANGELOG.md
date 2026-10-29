@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.3](https://github.com/chrischall/artsonia-mcp/compare/v1.3.2...v1.3.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group with 4 updates ([#238](https://github.com/chrischall/artsonia-mcp/issues/238)) ([28dc7a3](https://github.com/chrischall/artsonia-mcp/commit/28dc7a3c6e460ad216cf78bdd096ba8700c06fae))
+* **deps:** require @chrischall/mcp-utils 3.4.0 ([#239](https://github.com/chrischall/artsonia-mcp/issues/239)) ([2040abe](https://github.com/chrischall/artsonia-mcp/commit/2040abe826ef8925156f71230c2bdbeb37469706))
+* **deps:** require the MCP SDK ^2.4.0 that mcp-utils 3.4.0 peer-requires ([#240](https://github.com/chrischall/artsonia-mcp/issues/240)) ([3e171e5](https://github.com/chrischall/artsonia-mcp/commit/3e171e5acf58c3e0e585c6a8a6990515ee2a7f54))
+
+
+### Documentation
+
+* **mint:** add sample prompts for the public catalog ([#235](https://github.com/chrischall/artsonia-mcp/issues/235)) ([1387ce6](https://github.com/chrischall/artsonia-mcp/commit/1387ce631553a02759d0ebe0bac6754fb88914bc))
+
 ## [1.3.2](https://github.com/chrischall/artsonia-mcp/compare/v1.3.1...v1.3.2) (2026-10-17)
 
 
