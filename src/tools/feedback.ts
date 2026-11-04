@@ -39,13 +39,23 @@ const ARTIST_ID_DESCRIPTION = 'Student artist_id (from artsonia_list_students).'
  * runtime schema is still any string and the handler accepts a label or a raw
  * numeric id); with none it is the plain numeric id it always was — an empty
  * `enum` is invalid JSON Schema.
+ *
+ * The enum is the NAMES only, and the description says so (artsonia#244).
+ * Not `anyOf [names, numeric pattern]`: a host that fans a question out over
+ * the subject reads a top-level `enum` only (mcp-host context groups, D5), so
+ * an `anyOf` would hide every student from it. Not the ids in the enum either:
+ * that fan-out would then read each student twice. A caller that does not
+ * validate against the schema may still send the numeric artist_id, and
+ * `StudentDirectory.resolve` passes it through (a student followed after start
+ * included).
  */
+export const ARTIST_ID_ENUM_DESCRIPTION =
+  'The student, by name as listed here (from artsonia_list_students). ' +
+  'The server also resolves a numeric artist_id, but this schema offers the names only.';
+
 function artistIdArg(students: StudentDirectory | null | undefined) {
   if (!students) return NumericIdString.describe(ARTIST_ID_DESCRIPTION);
-  return z
-    .string()
-    .meta({ enum: students.labels })
-    .describe("A student's name as listed (from artsonia_list_students), or their numeric artist_id.");
+  return z.string().meta({ enum: students.labels }).describe(ARTIST_ID_ENUM_DESCRIPTION);
 }
 
 /** Count the unread items in a student's feedback page. */

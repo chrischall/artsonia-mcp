@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { registerFeedbackTools, briefLine } from '../../src/tools/feedback.js';
 import { client } from '../../src/client.js';
 import { createTestHarness, parseResult } from '../helpers.js';
-import type { StudentDirectory } from '../../src/tools/student-directory.js';
+import { loadStudentDirectory, type StudentDirectory } from '../../src/tools/student-directory.js';
+import type { ArtsoniaClient } from '../../src/client.js';
 
 /** Synthetic feedback rows — no real names. */
 function feedbackPage(rows: Array<{ id: string; message: string; unread: boolean }>): string {
@@ -109,5 +110,46 @@ describe('artsonia_get_feedback view: brief', () => {
     const res = await h.callTool('artsonia_get_feedback', { artist_id: 'Student A' });
     expect(res.isError).toBe(true);
     expect(mockFetchHtml).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * artsonia#244: the subject enum lists the student NAMES — the schema's
+ * contract, since the gateway reads a top-level `enum` only — while the
+ * handler still resolves a raw numeric artist_id for a caller that does not
+ * validate against the schema. Driven through the REAL directory.
+ */
+describe('artsonia_get_feedback artist_id: names in the schema, a numeric id still accepted', () => {
+  const dashboard = '<div class="artist-card"><a href="/artists/portfolio.asp?id=101">p</a><a class="lightlink">Student A</a></div>';
+  async function realDirectory(): Promise<StudentDirectory> {
+    const c = { fetchHtml: vi.fn(async () => dashboard) } as unknown as ArtsoniaClient;
+    return (await loadStudentDirectory(c))!;
+  }
+  async function servedArtistId(h: Awaited<ReturnType<typeof harnessWith>>) {
+    const tool = (await h.client.listTools()).tools.find((t) => t.name === 'artsonia_get_feedback')!;
+    return (tool.inputSchema.properties as Record<string, Record<string, unknown>>).artist_id;
+  }
+
+  it('publishes the names as a top-level enum (never anyOf) and says a numeric id is still accepted', async () => {
+    const h = await harnessWith(await realDirectory());
+    const prop = await servedArtistId(h);
+    expect(prop.enum).toEqual(['Student A']);
+    expect(prop).not.toHaveProperty('anyOf');
+    expect(prop.description).toMatch(/this schema offers the names only/);
+    expect(prop.description).toMatch(/also resolves a numeric artist_id/);
+  });
+
+  it('accepts the numeric artist_id of a listed student', async () => {
+    const h = await harnessWith(await realDirectory());
+    const res = await h.callTool('artsonia_get_feedback', { artist_id: '101' });
+    expect(res.isError).toBeFalsy();
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=101');
+  });
+
+  it('accepts the numeric artist_id of a student followed after start', async () => {
+    const h = await harnessWith(await realDirectory());
+    const res = await h.callTool('artsonia_get_feedback', { artist_id: '999', view: 'brief' });
+    expect(res.isError).toBeFalsy();
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=999');
   });
 });
