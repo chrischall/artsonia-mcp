@@ -52,6 +52,14 @@ describe('briefLine', () => {
     expect(briefLine({ message: '--none', is_read: true })).toBe('--none — no date — read');
   });
 
+  it('escapes a message that is just "--" (it trims to "--", and the composed line would start with "-- ")', () => {
+    for (const message of ['--', '-- ', '  --  ', '--\n']) {
+      const line = briefLine({ message, is_read: false });
+      expect(line).toBe('\\-- — no date — unread');
+      expect(line.startsWith('-- ')).toBe(false);
+    }
+  });
+
   it('keeps an escaped long message within 120 characters as a whole line', () => {
     const line = briefLine({ message: `-- ${'x'.repeat(300)}`, is_read: false });
     expect(line.length).toBeLessThanOrEqual(120);
