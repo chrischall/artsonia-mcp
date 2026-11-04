@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0](https://github.com/chrischall/artsonia-mcp/compare/v1.3.3...v1.4.0) (2026-11-04)
+
+
+### Features
+
+* context-group hints ([#243](https://github.com/chrischall/artsonia-mcp/issues/243)) ([68841fe](https://github.com/chrischall/artsonia-mcp/commit/68841fec2864791c6f5e9a2c815f299ad3427408))
+
+
+### Bug Fixes
+
+* **brief:** align the brief view with the fleet contract ([#246](https://github.com/chrischall/artsonia-mcp/issues/246)) ([0fb38f0](https://github.com/chrischall/artsonia-mcp/commit/0fb38f0c7684029db79df83ae9fb08b2ff784108))
+* **deps:** bump the production-dependencies group with 2 updates ([#241](https://github.com/chrischall/artsonia-mcp/issues/241)) ([aadfe37](https://github.com/chrischall/artsonia-mcp/commit/aadfe370fe71dc21896eeca695891705ce625db7))
+* **schema:** say artsonia_get_feedback's artist_id enum offers student names only ([#245](https://github.com/chrischall/artsonia-mcp/issues/245)) ([69ff318](https://github.com/chrischall/artsonia-mcp/commit/69ff3183458c664fa58f93a4b6b465ad9329b076)), closes [#244](https://github.com/chrischall/artsonia-mcp/issues/244)
+
 ## [1.3.3](https://github.com/chrischall/artsonia-mcp/compare/v1.3.2...v1.3.3) (2026-10-29)
 
 
