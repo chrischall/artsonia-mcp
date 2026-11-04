@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { minifiedResult, toolAnnotations } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
+import { schoolMeta } from './hints.js';
 import { parseAwards, parseProfile } from '../parse.js';
 
 export function registerAccountTools(server: McpServer, client: ArtsoniaClient): void {
@@ -12,6 +13,7 @@ export function registerAccountTools(server: McpServer, client: ArtsoniaClient):
       description:
         "List a student's Artsonia awards/achievement badges — current-year badges (name, earned/not, criteria, progress) plus badges earned in prior years. Pass the artist_id from artsonia_list_students.",
       annotations: toolAnnotations({ title: "Get a student's awards & activities", readOnly: true, openWorld: true }),
+      _meta: schoolMeta('lookup', { aliases: ['awards', 'badges'] }),
       inputSchema: z.object({ artist_id: z.string().regex(/^\d+$/, 'must be a numeric id').describe('Student artist_id (from artsonia_list_students).') }),
     },
     async ({ artist_id }) => {
@@ -31,6 +33,7 @@ export function registerAccountTools(server: McpServer, client: ArtsoniaClient):
       description:
         'Show your Artsonia parent/fan account profile: name, email, mobile, and current notification opt-in states (news / artist activity / promos). Read-only complement to artsonia_set_notifications.',
       annotations: toolAnnotations({ title: 'Get your account profile', readOnly: true, openWorld: true }),
+      _meta: schoolMeta('lookup'),
       inputSchema: z.object({}),
     },
     async () => minifiedResult(parseProfile(await client.fetchHtml('/members/profile/'))),

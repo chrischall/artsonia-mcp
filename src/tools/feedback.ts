@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
   NumericIdString,
+  UNTRUSTED_CONTENT_RULE,
   UNTRUSTED_DESCRIPTION_SUFFIX,
   minifiedResult,
   toolAnnotations,
@@ -9,6 +10,43 @@ import {
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
 import { parseFeedback } from '../parse.js';
+import { schoolMeta } from './hints.js';
+import type { StudentDirectory } from './student-directory.js';
+
+const BRIEF_MAX = 120;
+
+/** Who writes the text a brief feedback line carries, for the untrusted envelope's note. */
+const FEEDBACK_NOTE = `Feedback messages are written by your student's teachers. ${UNTRUSTED_CONTENT_RULE}`;
+
+/**
+ * One feedback item as one line, `<message> — no date — <unread|read>`, at
+ * most 120 characters (the message is shortened). Artsonia dates feedback only
+ * relatively ("Posted 9 months ago"), so there is no ISO date to give.
+ */
+export function briefLine(item: { message: string; is_read: boolean }): string {
+  const message = item.message.replace(/\s+/g, ' ').trim() || '(no message)';
+  const tail = ` — no date — ${item.is_read ? 'read' : 'unread'}`;
+  const room = BRIEF_MAX - tail.length;
+  const shown = message.length > room ? `${message.slice(0, Math.max(room - 1, 0))}…` : message;
+  return `${shown}${tail}`;
+}
+
+const ARTIST_ID_DESCRIPTION = 'Student artist_id (from artsonia_list_students).';
+
+/**
+ * `artist_id` for the canonical read. With a start-time student listing it
+ * publishes the student LABELS as a JSON Schema `enum` (via `.meta()`, so the
+ * runtime schema is still any string and the handler accepts a label or a raw
+ * numeric id); with none it is the plain numeric id it always was — an empty
+ * `enum` is invalid JSON Schema.
+ */
+function artistIdArg(students: StudentDirectory | null | undefined) {
+  if (!students) return NumericIdString.describe(ARTIST_ID_DESCRIPTION);
+  return z
+    .string()
+    .meta({ enum: students.labels })
+    .describe("A student's name as listed (from artsonia_list_students), or their numeric artist_id.");
+}
 
 /** Count the unread items in a student's feedback page. */
 async function unreadCount(client: ArtsoniaClient, artist_id: string): Promise<number> {
@@ -16,18 +54,38 @@ async function unreadCount(client: ArtsoniaClient, artist_id: string): Promise<n
   return feedback.filter((f) => !f.is_read).length;
 }
 
-export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient): void {
+export function registerFeedbackTools(
+  server: McpServer,
+  client: ArtsoniaClient,
+  students?: StudentDirectory | null,
+): void {
   server.registerTool(
     'artsonia_get_feedback',
     {
       title: 'Get teacher feedback for a student',
       description:
-        "List the teacher feedback left on a student's artwork — each item's message, who posted it and when, the artwork it's about, and whether it's been marked as read. Pass the artist_id from artsonia_list_students. " + UNTRUSTED_DESCRIPTION_SUFFIX,
+        "List the teacher feedback left on a student's artwork — each item's message, who posted it and when, the artwork it's about, and whether it's been marked as read. Pass the artist_id from artsonia_list_students. view: \"brief\" answers one line per item (message — no date — unread|read), or \"-- none\". " + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get teacher feedback for a student', readOnly: true, openWorld: true }),
-      inputSchema: z.object({ artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).') }),
+      _meta: schoolMeta('whats-new', {
+        canonical: true,
+        subject: 'artist_id',
+        aliases: ['art', 'art teacher', 'art class', 'artwork', 'artsonia', 'teacher feedback'],
+      }),
+      inputSchema: z.object({
+        artist_id: artistIdArg(students),
+        view: z
+          .enum(['full', 'brief'])
+          .optional()
+          .describe('"full" (default) returns every feedback item with unread_count; "brief" returns one line per item: message — no date — unread|read.'),
+      }),
     },
-    async ({ artist_id }) => {
+    async ({ artist_id: raw, view }) => {
+      const artist_id = students ? students.resolve(raw) : raw;
       const feedback = parseFeedback(await client.fetchHtml(`/members/feedback/?artist=${artist_id}`));
+      if (view === 'brief') {
+        const lines = feedback.length === 0 ? ['-- none'] : feedback.map(briefLine);
+        return untrustedResult(lines, { note: FEEDBACK_NOTE });
+      }
       return untrustedResult({
         artist_id,
         unread_count: feedback.filter((f) => !f.is_read).length,
@@ -45,6 +103,7 @@ export function registerFeedbackTools(server: McpServer, client: ArtsoniaClient)
       // Destructive by the inverse test: nothing in this tool set marks feedback
       // unread again, and it marks ALL of the student's feedback at once.
       annotations: toolAnnotations({ title: "Mark a student's feedback as read", readOnly: false, openWorld: true, destructive: true }),
+      _meta: schoolMeta('change'),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
       }),

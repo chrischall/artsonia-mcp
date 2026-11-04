@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { UNTRUSTED_DESCRIPTION_SUFFIX, minifiedResult, toolAnnotations, untrustedResult } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
+import { schoolMeta } from './hints.js';
 import { parseStudents, parseNotifications } from '../parse.js';
 
 export function registerStudentTools(server: McpServer, client: ArtsoniaClient): void {
@@ -10,6 +11,7 @@ export function registerStudentTools(server: McpServer, client: ArtsoniaClient):
       title: 'List followed students',
       description: 'List the student(s) on your Artsonia parent/fan account with their artist_id, name, school, grade, and artwork/fan counts. The artist_id is the selector used by the portfolio, comments, and fan tools.',
       annotations: toolAnnotations({ title: 'List followed students', openWorld: true }),
+      _meta: schoolMeta('lookup', { aliases: ['kids', 'students', 'my children'] }),
     },
     async () => minifiedResult({ students: parseStudents(await client.fetchHtml('/members/')) }),
   );
@@ -19,6 +21,7 @@ export function registerStudentTools(server: McpServer, client: ArtsoniaClient):
       title: 'Get account notifications',
       description: 'Return the notification/activity feed on the parent dashboard (e.g. new teacher feedback, fan-club prompts), with a count and the list of notices. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get account notifications', openWorld: true }),
+      _meta: schoolMeta('whats-new', { aliases: ['art', 'artsonia', 'notifications'] }),
     },
     async () => untrustedResult(parseNotifications(await client.fetchHtml('/members/'))),
   );

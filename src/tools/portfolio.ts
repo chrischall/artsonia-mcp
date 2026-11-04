@@ -9,6 +9,7 @@ import {
   untrustedResult,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
+import { schoolMeta } from './hints.js';
 import { parsePortfolio, parseArtwork } from '../parse.js';
 import { FETCH_CONCURRENCY } from './download.js';
 
@@ -20,6 +21,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       description:
         "List a student's artworks (artwork_id, is_private flag, thumbnail). Pass the artist_id from artsonia_list_students. Set include_details:true to also fetch each artwork's full detail (title, project, grade, views, …) in one call — this fetches a detail page per artwork (slower), so leave it off when the lean tiles are enough. " + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: "Get a student's portfolio", openWorld: true }),
+      _meta: schoolMeta('lookup', { aliases: ['art', 'artwork', 'portfolio', 'art class'] }),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         include_details: z
@@ -50,6 +52,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       title: 'Get artwork detail',
       description: 'Get one artwork: title, artist screen-name, view count, project (assignment name), and the comments on it. Pass an artwork_id from a portfolio. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'Get artwork detail', openWorld: true }),
+      _meta: schoolMeta('lookup'),
       inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
     async ({ artwork_id }) => untrustedResult(parseArtwork(await client.fetchHtml(`/museum/art.asp?id=${artwork_id}`))),
@@ -60,6 +63,7 @@ export function registerPortfolioTools(server: McpServer, client: ArtsoniaClient
       title: 'List comments on an artwork',
       description: 'List the comments on a given artwork (author + text). Pass an artwork_id from a portfolio. ' + UNTRUSTED_DESCRIPTION_SUFFIX,
       annotations: toolAnnotations({ title: 'List comments on an artwork', openWorld: true }),
+      _meta: schoolMeta('lookup'),
       inputSchema: z.object({ artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).') }),
     },
     async ({ artwork_id }) => {

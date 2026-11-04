@@ -87,6 +87,12 @@ Username/password auth using your Artsonia parent/fan account credentials. The s
 | `artsonia_invite_fan` | Invite someone to become a fan of a student |
 | `artsonia_set_notifications` | Update notification preferences for a student |
 
+### In context groups
+
+On a host that groups MCPs by context (mcp-host's context groups), every tool here except `artsonia_healthcheck` is in the **school** group. The one canonical read is **what's new**: `artsonia_get_feedback` — teacher feedback on a student's artwork. Its subject is `artist_id`, which publishes the followed students' names as an enum listed once at server start (bounded at 5 s; no enum when the listing fails or nobody is followed) and accepts a name or a raw numeric `artist_id`. `view: "brief"` answers one line per item, `<message> — no date — <unread|read>` (Artsonia dates feedback only relatively), inside the untrusted-data envelope as `data: string[]`, or `-- none`. Nothing here answers what's due or what's on.
+
+A compound ask looks like "anything new from school — and any new art feedback?": the group fans out to each student's feedback beside the other school MCPs' reads. On the fetchproxy (browser) transport — how a hosted Artsonia runs — the group answers "needs your browser open" for this MCP when no signed-in Artsonia tab is reachable.
+
 ### Confirming writes
 
 `artsonia_post_comment` and `artsonia_invite_fan` ask the user to confirm first. (`artsonia_set_notifications`, `artsonia_mark_feedback_read` and `artsonia_download_artwork` run in one call with no confirmation step.) Where the client can show a confirmation prompt, it does (unless the server sets `MCP_CONFIRM_ELICITATION=off`). Otherwise the first call changes nothing and returns `status: "confirmation-required"` with a `preview` of exactly what would be sent and a `confirmToken`: show the preview to the user, and only after they approve in chat call the tool again with the **same arguments** plus `confirmToken`. A token works once (`TOKEN_REUSED`), expires, and is refused as `DRAFT_CHANGED` (with a fresh preview and token) if the arguments or the data it acts on changed in between. `MCP_CONFIRM_MODE` (`ask-user` default / `auto` / `refuse`) controls this fallback.

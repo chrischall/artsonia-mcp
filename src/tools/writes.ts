@@ -10,6 +10,7 @@ import {
   toolAnnotations,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
+import { schoolMeta } from './hints.js';
 
 const OPTIN_FIELDS = { news: 'OptInNews', artist_activity: 'OptInArtistActivity', promos: 'OptInPromos' } as const;
 const PASSWORD_FIELDS = new Set(['OldPassword', 'NewPassword', 'NewPassword2']);
@@ -64,6 +65,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: 'Post a comment on an artwork',
       description: "Post a comment on a student's artwork. " + CONFIRM_FLOW_SENTENCE,
       annotations: toolAnnotations({ title: 'Post a comment on an artwork', readOnly: false, openWorld: true, destructive: true }),
+      _meta: schoolMeta('send'),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         artwork_id: NumericIdString.describe('Artwork id (from artsonia_get_portfolio).'),
@@ -106,6 +108,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: "Invite a fan to a student's fan club",
       description: "Invite someone (by name + email) to follow a student's Artsonia portfolio. Sends them an invite email. " + CONFIRM_FLOW_SENTENCE + " Use only real addresses you're authorized to invite (test with @example.com).",
       annotations: toolAnnotations({ title: 'Invite a fan', readOnly: false, openWorld: true, destructive: true }),
+      _meta: schoolMeta('send'),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         first_name: z.string().min(1).describe("Fan's first name."),
@@ -159,6 +162,7 @@ export function registerWriteTools(server: McpServer, client: ArtsoniaClient): v
       title: 'Set notification preferences',
       description: "Turn the account's email opt-ins on/off (news, artist activity, promos). Reads your profile, changes only the opt-in(s) you specify, and re-saves — leaving your name/email/password untouched. Runs immediately, with no confirmation step, then re-reads the profile to verify the change stuck.",
       annotations: toolAnnotations({ title: 'Set notification preferences', readOnly: false, openWorld: true, destructive: false }),
+      _meta: schoolMeta('change'),
       inputSchema: z.object({
         news: z.boolean().optional().describe('OptInNews — general Artsonia news emails.'),
         artist_activity: z.boolean().optional().describe('OptInArtistActivity — emails about your student(s) activity.'),

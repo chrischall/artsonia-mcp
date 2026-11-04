@@ -50,6 +50,8 @@ src/
     make-download-io.ts   # makeDownloadIO(): env-driven IO selector (ARTSONIA_INLINE_DOWNLOADS) — the sibling of make-transport.ts
     embed.ts              # embedJpegMetadata(): EXIF (piexif-ts) + hand-rolled IPTC APP13; lazily imported by download.ts
     writes.ts             # artsonia_post_comment, artsonia_invite_fan, artsonia_set_notifications + parseProfileForm()
+    hints.ts              # schoolMeta(): the `_meta.mint` context-group hint every tool but the healthcheck carries (group `school`; tests/tools/mint-hints.test.ts)
+    student-directory.ts  # loadStudentDirectory(): lists the followed students ONCE at start (≤ 5 s, null on failure) for the canonical feedback read's `artist_id` enum
 ```
 
 `src/index.ts` builds an array of `(server) => register<Domain>Tools(server, client)` closures and hands them to `runMcp` from `@chrischall/mcp-utils`. Each `tools/*.ts` exports a `register<Domain>Tools(server, client)` that calls `server.registerTool(...)`.
@@ -79,7 +81,7 @@ All tools are `artsonia_*`-prefixed. R = read-only, W = write (`post_comment`/`i
 | `artsonia_get_artwork` | portfolio.ts | GET `/museum/art.asp?id=` | R |
 | `artsonia_list_comments` | portfolio.ts | GET `/museum/art.asp?id=` | R |
 | `artsonia_get_fans` | fans.ts | GET `/members/fanclub/?artist=` | R |
-| `artsonia_get_feedback` | feedback.ts | GET `/members/feedback/?artist=` | R |
+| `artsonia_get_feedback` | feedback.ts | GET `/members/feedback/?artist=` (`view: brief` → one line per item in the untrusted envelope; `artist_id` takes a student name from the start-time enum or a numeric id) | R |
 | `artsonia_mark_feedback_read` | feedback.ts | POST `/members/feedback/default.asp?artist=` (`ConfirmAsRead`) | W |
 | `artsonia_get_awards` | account.ts | GET `/artists/awards.asp?id=` | R |
 | `artsonia_get_profile` | account.ts | GET `/members/profile/` | R |
