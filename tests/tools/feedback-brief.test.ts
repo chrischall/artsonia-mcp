@@ -46,6 +46,27 @@ describe('briefLine', () => {
     expect(line.endsWith('… — no date — unread')).toBe(true);
   });
 
+  it('escapes a message that starts with "-- " or "\\" with one leading backslash, so it never reads as a note', () => {
+    expect(briefLine({ message: '-- none', is_read: false })).toBe('\\-- none — no date — unread');
+    expect(briefLine({ message: '\\ok', is_read: true })).toBe('\\\\ok — no date — read');
+    expect(briefLine({ message: '--none', is_read: true })).toBe('--none — no date — read');
+  });
+
+  it('escapes a message that is just "--" (it trims to "--", and the composed line would start with "-- ")', () => {
+    for (const message of ['--', '-- ', '  --  ', '--\n']) {
+      const line = briefLine({ message, is_read: false });
+      expect(line).toBe('\\-- — no date — unread');
+      expect(line.startsWith('-- ')).toBe(false);
+    }
+  });
+
+  it('keeps an escaped long message within 120 characters as a whole line', () => {
+    const line = briefLine({ message: `-- ${'x'.repeat(300)}`, is_read: false });
+    expect(line.length).toBeLessThanOrEqual(120);
+    expect(line.startsWith('\\-- x')).toBe(true);
+    expect(line.endsWith('… — no date — unread')).toBe(true);
+  });
+
   it('collapses whitespace and names an empty message', () => {
     expect(briefLine({ message: '  a\n  b ', is_read: true })).toBe('a b — no date — read');
     expect(briefLine({ message: '', is_read: true })).toBe('(no message) — no date — read');
