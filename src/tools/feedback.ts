@@ -22,9 +22,13 @@ const FEEDBACK_NOTE = `Feedback messages are written by your student's teachers.
  * One feedback item as one line, `<message> — no date — <unread|read>`, at
  * most 120 characters (the message is shortened). Artsonia dates feedback only
  * relatively ("Posted 9 months ago"), so there is no ISO date to give.
+ * A message that starts with `-- ` or `\` is escaped with one leading `\`, so
+ * a teacher-written message can never read as a note line (the gateway strips
+ * one backslash from every item line).
  */
 export function briefLine(item: { message: string; is_read: boolean }): string {
-  const message = item.message.replace(/\s+/g, ' ').trim() || '(no message)';
+  const text = item.message.replace(/\s+/g, ' ').trim() || '(no message)';
+  const message = text.startsWith('-- ') || text.startsWith('\\') ? `\\${text}` : text;
   const tail = ` — no date — ${item.is_read ? 'read' : 'unread'}`;
   const room = BRIEF_MAX - tail.length;
   const shown = message.length > room ? `${message.slice(0, Math.max(room - 1, 0))}…` : message;
