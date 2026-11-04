@@ -13,6 +13,7 @@ import {
   withAmbientCancellation,
 } from '@chrischall/mcp-utils';
 import type { ArtsoniaClient } from '../client.js';
+import { schoolMeta } from './hints.js';
 import { parsePortfolio, parseArtwork, parseFeedback, parseStudents, artworkImageUrl } from '../parse.js';
 
 /**
@@ -247,6 +248,7 @@ export function registerDownloadTools(
       // destructive: skip_existing:false overwrites existing images, write_metadata
       // overwrites <image>.json sidecars, and write_index overwrites dest/index.json.
       annotations: toolAnnotations({ title: "Download a student's artwork images", readOnly: false, openWorld: true, destructive: true }),
+      _meta: schoolMeta('other'),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
         dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing. Must be inside the allowed download folders: ARTSONIA_OUTPUT_DIR when set, otherwise ~/Downloads or ~/Pictures (on a hosted server, $MCP_DATA_DIR/downloads); anything else is refused before any download.'),
