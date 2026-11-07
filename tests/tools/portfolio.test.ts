@@ -24,30 +24,30 @@ describe('portfolio tools', () => {
   });
   it('get_portfolio fetches /artists/portfolio.asp?id=<artist_id>', async () => {
     mockFetchHtml.mockResolvedValue(portfolio);
-    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/portfolio.asp?id=13447141');
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '1001' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/portfolio.asp?id=1001');
     expect(out.artworks).toHaveLength(2);
-    expect(out.artworks[0].artwork_id).toBe('150567537');
-    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/150567537.jpg');
+    expect(out.artworks[0].artwork_id).toBe('5003');
+    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/5003.jpg');
     expect(out.artworks[1].is_private).toBe(true);
   });
   it('get_artwork fetches /museum/art.asp?id=<artwork_id> and parses detail', async () => {
     mockFetchHtml.mockResolvedValue(artwork);
-    const out = parse(await harness.callTool('artsonia_get_artwork', { artwork_id: '150567537' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=150567537');
+    const out = parse(await harness.callTool('artsonia_get_artwork', { artwork_id: '5003' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=5003');
     expect(out.title).toBe('My silhouette still life');
     expect(out.project).toBe('6th Grade Silhouette Still Life');
-    expect(out.comment_entry.artist_id).toBe('13447141');
+    expect(out.comment_entry.artist_id).toBe('1001');
   });
   it('list_comments returns the comments array from the artwork page', async () => {
     mockFetchHtml.mockResolvedValue(artwork);
-    const out = parse(await harness.callTool('artsonia_list_comments', { artwork_id: '150567537' }));
+    const out = parse(await harness.callTool('artsonia_list_comments', { artwork_id: '5003' }));
     // comments markup is UNVERIFIED for non-zero; fixture has 0 comments
     expect(Array.isArray(out.comments)).toBe(true);
   });
   it('get_portfolio without include_details returns lean tiles and fetches portfolio only', async () => {
     mockFetchHtml.mockResolvedValue(portfolio);
-    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '1001' }));
     expect(mockFetchHtml).toHaveBeenCalledTimes(1); // portfolio only, no per-artwork detail
     expect(out.artworks[0]).not.toHaveProperty('title');
     expect(out.artworks[0]).not.toHaveProperty('project');
@@ -55,17 +55,17 @@ describe('portfolio tools', () => {
   it('get_portfolio with include_details=true enriches each row with detail fields', async () => {
     mockFetchHtml.mockImplementation(((p: string) =>
       Promise.resolve(p.includes('portfolio.asp') ? portfolio : artwork)) as never);
-    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141', include_details: true }));
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '1001', include_details: true }));
     // portfolio (1) + one detail fetch per artwork (2) = 3
     expect(mockFetchHtml).toHaveBeenCalledTimes(3);
-    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=150567537');
+    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=5003');
     expect(out.artworks).toHaveLength(2);
     expect(out.artworks[0].title).toBe('My silhouette still life');
     expect(out.artworks[0].project).toBe('6th Grade Silhouette Still Life');
     expect(out.artworks[0].grade).toBeDefined();
     // Lean tile fields are preserved.
-    expect(out.artworks[0].artwork_id).toBe('150567537');
-    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/150567537.jpg');
+    expect(out.artworks[0].artwork_id).toBe('5003');
+    expect(out.artworks[0].thumbnail).toBe('https://images.artsonia.com/art/small/5003.jpg');
     // The heavy per-artwork comments array + comment_entry are dropped from
     // the enriched rows (use artsonia_get_artwork for those).
     expect(out.artworks[0]).not.toHaveProperty('comments');

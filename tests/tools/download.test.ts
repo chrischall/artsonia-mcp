@@ -41,13 +41,13 @@ const DETAILS: Record<string, string> = {
 const FEEDBACK = `<div class="comment-row">
   <div class="comment-art"><a href="/museum/art.asp?id=300"><img src="x.jpg"></a></div>
   <div class="comment">Great work on values.</div>
-  <div class="commenter">Posted 1 month ago by Curt Atkins (teacher)</div>
+  <div class="commenter">Posted 1 month ago by Jordan Lee (teacher)</div>
   <div class="comment-options"></div>
 </div>`;
 // Parent dashboard (for the post-run artwork_count sanity check): a student whose
 // artwork_count (46) does NOT match the 3-tile portfolio above.
 const MEMBERS = `<div class="artist-card">
-  <a class="lightlink" href="/artists/portfolio.asp?id=16011097">Finn Hall</a>
+  <a class="lightlink" href="/artists/portfolio.asp?id=1002">Sam Doe</a>
   <div>Currently at School (Grade 1)</div>
   <div class="stat">46 artworks</div>
 </div>`;
@@ -94,8 +94,8 @@ restoreConfirmEnvAfterEach();
 
 describe('buildFilename', () => {
   it('default template → grade/project/title with auto-appended id, slugified', () => {
-    expect(buildFilename('{grade} - {project} - {title}', { grade: '6', project: 'Silhouette Still Life', title: 'My silhouette' }, '150567537'))
-      .toBe('Grade 6 - Silhouette Still Life - My silhouette (150567537).jpg');
+    expect(buildFilename('{grade} - {project} - {title}', { grade: '6', project: 'Silhouette Still Life', title: 'My silhouette' }, '5003'))
+      .toBe('Grade 6 - Silhouette Still Life - My silhouette (5003).jpg');
   });
   it('drops empty tokens and their separators', () => {
     expect(buildFilename('{grade} - {project} - {title}', { grade: null, project: '', title: 'Solo' }, '42')).toBe('Solo (42).jpg');
@@ -103,9 +103,9 @@ describe('buildFilename', () => {
   });
   it('keeps a long non-ASCII name under the 255-byte filename limit (fleet-audit#364)', () => {
     for (const ch of ['水', '🎨', 'é']) {
-      const name = buildFilename('{title}', { title: ch.repeat(150) }, '150567537');
+      const name = buildFilename('{title}', { title: ch.repeat(150) }, '5003');
       expect(Buffer.byteLength(name, 'utf8')).toBeLessThanOrEqual(255);
-      expect(name.endsWith(' (150567537).jpg')).toBe(true);
+      expect(name.endsWith(' (5003).jpg')).toBe(true);
       // Truncation never splits a character (no lone surrogate, no U+FFFD).
       expect(name).not.toMatch(/[\uD800-\uDFFF]/u);
       expect(name.startsWith(ch.repeat(10))).toBe(true);
@@ -375,7 +375,7 @@ describe('artsonia_download_artwork', () => {
 
   it('warns when downloaded+skipped does not match the student artwork_count', async () => {
     const out = parse(await confirmed.callTool('artsonia_download_artwork', {
-      artist_id: '16011097', dest: dir, filename_template: '{artwork_id}',
+      artist_id: '1002', dest: dir, filename_template: '{artwork_id}',
     }));
     expect(out.downloaded_count).toBe(3);
     expect(out.count_check).toEqual({ expected: 46, on_disk: 3, ok: false });
@@ -394,7 +394,7 @@ describe('artsonia_download_artwork', () => {
 
   it('count check is skipped when the run is filtered (limit/project/grade/include_private)', async () => {
     const out = parse(await confirmed.callTool('artsonia_download_artwork', {
-      artist_id: '16011097', dest: dir, limit: 2, filename_template: '{artwork_id}',
+      artist_id: '1002', dest: dir, limit: 2, filename_template: '{artwork_id}',
     }));
     expect(out.count_check).toBeUndefined();
     expect(out.warning).toBeUndefined();

@@ -27,8 +27,8 @@ describe('student tools', () => {
     const out = parse(await harness.callTool('artsonia_list_students'));
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/');
     expect(out.students).toHaveLength(2);
-    expect(out.students[0].artist_id).toBe('16011097');
-    expect(out.students[0].name).toBe('Finn Hall');
+    expect(out.students[0].artist_id).toBe('1002');
+    expect(out.students[0].name).toBe('Sam Doe');
     expect(out.students[0].artwork_count).toBe(46);
   });
   it('artsonia_get_activity returns notifications', async () => {

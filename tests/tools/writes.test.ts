@@ -14,8 +14,8 @@ const OK = { status: 302, body: '', url: 'https://www.artsonia.com/members/', se
 const mockWrite = vi.spyOn(client, 'write').mockResolvedValue(OK as never);
 const mockFetchHtml = vi.spyOn(client, 'fetchHtml').mockResolvedValue('' as never);
 
-const COMMENT = { artist_id: '13447141', artwork_id: '150567537', comment: 'Great work!' };
-const INVITE = { artist_id: '13447141', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3' };
+const COMMENT = { artist_id: '1001', artwork_id: '5003', comment: 'Great work!' };
+const INVITE = { artist_id: '1001', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3' };
 
 let harness: Awaited<ReturnType<typeof createTestHarness>>;
 beforeEach(() => { mockWrite.mockClear(); mockFetchHtml.mockReset(); mockFetchHtml.mockResolvedValue('' as never); });
@@ -40,16 +40,16 @@ describe('write tools', () => {
   it('post_comment phase 1 returns the preview + a token and makes no network call', async () => {
     const out = await phaseOne(harness, 'artsonia_post_comment', COMMENT);
     // The fleet confirmWrite preview shape: method + path + exactly the form fields sent.
-    expect(out.preview).toMatchObject({ method: 'POST', path: '/museum/enter.asp?artist=13447141&art=150567537' });
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/museum/enter.asp?artist=1001&art=5003' });
     expect(out.preview.willSend).toEqual({ Comment: 'Great work!' });
-    expect(out.preview).toMatchObject({ artist_id: '13447141', artwork_id: '150567537' });
+    expect(out.preview).toMatchObject({ artist_id: '1001', artwork_id: '5003' });
     expect(out.confirmToken).toEqual(expect.any(String));
     expect(mockWrite).not.toHaveBeenCalled();
   });
   it('post_comment phase 2 posts Comment to /museum/enter.asp once and reports honestly (submitted, not verified)', async () => {
     const out = parse(await callConfirmed(harness, 'artsonia_post_comment', COMMENT));
     expect(mockWrite).toHaveBeenCalledTimes(1);
-    expect(mockWrite).toHaveBeenCalledWith('/museum/enter.asp?artist=13447141&art=150567537', 'Comment=Great+work%21');
+    expect(mockWrite).toHaveBeenCalledWith('/museum/enter.asp?artist=1001&art=5003', 'Comment=Great+work%21');
     // A 3xx is not proof of persistence — no false `posted: true`.
     expect(out.posted).toBeUndefined();
     expect(out.submitted).toBe(true);
@@ -100,10 +100,10 @@ describe('write tools', () => {
 
   it('invite_fan phase 1 previews the form it would send, with the RelationshipID caveat, and does not write', async () => {
     const out = await phaseOne(harness, 'artsonia_invite_fan', INVITE);
-    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/fanclub/add.asp?artist=13447141' });
+    expect(out.preview).toMatchObject({ method: 'POST', path: '/members/fanclub/add.asp?artist=1001' });
     expect(out.preview.willSend).toMatchObject({
       MemberType: 'fan', RelationshipID: '3',
-      FirstName: 'Test', LastName: 'Fan', EmailAddress: 'test@example.com', ArtistID: '13447141',
+      FirstName: 'Test', LastName: 'Fan', EmailAddress: 'test@example.com', ArtistID: '1001',
     });
     expect(out.preview.note).toMatch(/RelationshipID/);
     expect(mockWrite).not.toHaveBeenCalled();
@@ -112,11 +112,11 @@ describe('write tools', () => {
     const out = parse(await callConfirmed(harness, 'artsonia_invite_fan', { ...INVITE, is_parent: true }));
     expect(mockWrite).toHaveBeenCalledTimes(1);
     const [path, body] = mockWrite.mock.calls[0];
-    expect(path).toBe('/members/fanclub/add.asp?artist=13447141');
+    expect(path).toBe('/members/fanclub/add.asp?artist=1001');
     expect(body).toContain('FirstName=Test');
     expect(body).toContain('EmailAddress=test%40example.com');
     expect(body).toContain('RelationshipID=3');
-    expect(body).toContain('ArtistID=13447141');
+    expect(body).toContain('ArtistID=1001');
     expect(body).toContain('IsParent=on');
     // A 3xx is not proof of persistence — no false `invited: true`.
     expect(out.invited).toBeUndefined();
@@ -146,7 +146,7 @@ describe('write tools', () => {
     const [path, body] = mockWrite.mock.calls[0];
     expect(path).toBe('/members/profile/default.asp');
     const params = new URLSearchParams(body);
-    expect(params.get('FirstName')).toBe('Chris');
+    expect(params.get('FirstName')).toBe('Pat');
     expect(params.get('OptInNews')).toBe('Y');            // checked → real checkbox value, not "on"
     expect(params.get('OptInArtistActivity')).toBe('Y');  // preserved (was checked)
     expect(params.has('OptInPromos')).toBe(false);        // unchecked → omitted

@@ -40,12 +40,12 @@ beforeAll(async () => {
 afterAll(async () => { await harness.close(); });
 
 const FENCED: Array<[string, Record<string, unknown>]> = [
-  ['artsonia_get_artwork', { artwork_id: '150567537' }],
-  ['artsonia_list_comments', { artwork_id: '150567537' }],
-  ['artsonia_get_fans', { artist_id: '13447141' }],
-  ['artsonia_get_feedback', { artist_id: '13447141' }],
+  ['artsonia_get_artwork', { artwork_id: '5003' }],
+  ['artsonia_list_comments', { artwork_id: '5003' }],
+  ['artsonia_get_fans', { artist_id: '1001' }],
+  ['artsonia_get_feedback', { artist_id: '1001' }],
   ['artsonia_get_activity', {}],
-  ['artsonia_get_portfolio', { artist_id: '13447141', include_details: true }],
+  ['artsonia_get_portfolio', { artist_id: '1001', include_details: true }],
 ];
 
 describe('third-party text is fenced as untrusted data', () => {
@@ -63,7 +63,7 @@ describe('third-party text is fenced as untrusted data', () => {
   }
 
   it('the lean portfolio (ids + thumbnails only) carries no fence', async () => {
-    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '1001' }));
     expect(out.untrusted_content).toBeUndefined();
   });
 });

@@ -36,9 +36,9 @@ endpoint that needs the real browser); the default transport is direct
 `fetch` with the cookie jar.
 
 Identifiers:
-- **artistId** (a child/student), e.g. `16011097` (Finn), `13447141` (Lucas).
+- **artistId** (a child/student), e.g. `1002` (Sam), `1001` (Alex).
   Source: `portfolio.asp?id=<artistId>` and `?artist=<artistId>` params.
-- **artworkId** (numeric), e.g. `150567537`. Source: `art.asp?id=<artworkId>`.
+- **artworkId** (numeric), e.g. `5003`. Source: `art.asp?id=<artworkId>`.
   Thumbnail: `https://images.artsonia.com/art/small/<artworkId>.jpg`.
 
 ## Reads (GET, server-rendered HTML)
@@ -132,7 +132,7 @@ Top-level selectors confirmed during recon; these are the **inner** structures
 
 ### Dashboard `/members/`
 - **Students:** `.artist-card` (one per child). Inside:
-  - name → first `a.lightlink` (text, e.g. "Finn Hall").
+  - name → first `a.lightlink` (text, e.g. "Sam Doe").
   - school/grade → a child `<div>` whose text is `Currently at <School> (Grade <N>)`.
   - stats → `.stats-container .stat` divs, each text `"<n> <label>"` where label ∈
     {artworks, fans, comments, feedback, awards}; some `.stat` also carry
