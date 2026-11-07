@@ -142,9 +142,9 @@ describe('artsonia_download_artwork — dest confinement (disk IO)', () => {
   });
 
   it('accepts a new subfolder of a root and creates it', async () => {
-    const dest = join(root, 'Finn', 'art');
+    const dest = join(root, 'Sam', 'art');
     const h = await tool(() => new NodeDownloadIO([root]));
-    expect(existsSync(join(root, 'Finn'))).toBe(false);
+    expect(existsSync(join(root, 'Sam'))).toBe(false);
     const out = parseResult(await h.callTool('artsonia_download_artwork', args(dest)));
     expect(out.downloaded_count).toBe(1);
     expect(readdirSync(dest)).toEqual(['100.jpg']);

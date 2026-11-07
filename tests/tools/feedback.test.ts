@@ -27,8 +27,8 @@ describe('feedback tools', () => {
 
   it('get_feedback fetches /members/feedback/?artist=<id> and returns items + unread_count', async () => {
     mockFetchHtml.mockResolvedValue(feedback as never);
-    const out = parse(await harness.callTool('artsonia_get_feedback', { artist_id: '13447141' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=13447141');
+    const out = parse(await harness.callTool('artsonia_get_feedback', { artist_id: '1001' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=1001');
     expect(out.feedback).toHaveLength(2);
     expect(out.unread_count).toBe(1);
     expect(out.feedback[0].message).toBe('Looks ready to start next class.');
@@ -44,10 +44,10 @@ describe('feedback tools', () => {
     // The verifying re-read shows the previously-unread item now marked read.
     const allRead = feedback.replace(/This feedback has not been marked as read\./g, 'Read.');
     mockFetchHtml.mockResolvedValueOnce(allRead as never);
-    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141' }));
+    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '1001' }));
     expect(mockWrite).toHaveBeenCalledTimes(1);
-    expect(mockWrite).toHaveBeenCalledWith('/members/feedback/default.asp?artist=13447141', 'ConfirmAsRead=Mark+as+Read');
-    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=13447141'); // verifying re-read
+    expect(mockWrite).toHaveBeenCalledWith('/members/feedback/default.asp?artist=1001', 'ConfirmAsRead=Mark+as+Read');
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/feedback/?artist=1001'); // verifying re-read
     expect(out.verified).toBe(true);
     expect(out.marked_read).toBe(true);
     expect(out.unread_remaining).toBe(0);
@@ -55,7 +55,7 @@ describe('feedback tools', () => {
 
   it('mark_feedback_read reports NOT verified when the re-read still shows unread feedback (302 did not persist)', async () => {
     mockFetchHtml.mockResolvedValueOnce(feedback as never); // re-read still has 1 unread
-    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '13447141' }));
+    const out = parse(await harness.callTool('artsonia_mark_feedback_read', { artist_id: '1001' }));
     expect(out.verified).toBe(false);
     expect(out.marked_read).toBe(false);
     expect(out.unread_remaining).toBe(1);

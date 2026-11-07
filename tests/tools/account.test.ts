@@ -25,8 +25,8 @@ describe('account tools', () => {
 
   it('get_awards fetches /artists/awards.asp?id=<id> and returns awards + earned_count', async () => {
     mockFetchHtml.mockResolvedValue(awards as never);
-    const out = parse(await harness.callTool('artsonia_get_awards', { artist_id: '13447141' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/awards.asp?id=13447141');
+    const out = parse(await harness.callTool('artsonia_get_awards', { artist_id: '1001' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/awards.asp?id=1001');
     expect(out.awards).toHaveLength(4);
     expect(out.earned_count).toBe(3);
     expect(out.awards[0]).toMatchObject({ name: 'Portfolio', earned: true });
@@ -36,7 +36,7 @@ describe('account tools', () => {
     mockFetchHtml.mockResolvedValue(profile as never);
     const out = parse(await harness.callTool('artsonia_get_profile'));
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/profile/');
-    expect(out.email).toBe('chris@example.com');
+    expect(out.email).toBe('pat@example.com');
     expect(out.opt_ins).toMatchObject({ news: false, artist_activity: true, promos: false });
   });
 });

@@ -215,7 +215,7 @@ export interface Feedback {
   artwork_id: string | null;
   /** The teacher feedback text. */
   message: string;
-  /** Attribution line, e.g. "Posted 9 months ago by Curt Atkins (teacher) at <School>". */
+  /** Attribution line, e.g. "Posted 9 months ago by Jordan Lee (teacher) at <School>". */
   posted_by: string;
   /** False while the row shows "has not been marked as read". */
   is_read: boolean;

@@ -881,20 +881,20 @@ Parsers operate on raw server-rendered HTML. Selectors are from `docs/ARTSONIA-A
 <!doctype html><html><body>
 <section class="notifications">
   <h2>Notifications (2)</h2>
-  <a class="notice" href="/members/comments/?artist=13447141"><span class="notice-title">View teacher feedback for Lucas</span><span class="notice-body">A new comment is waiting.</span></a>
-  <a class="notice" href="/members/fanclub/add.asp?artist=16011097"><span class="notice-title">Add family to Finn's Fan Club</span><span class="notice-body">Invite more fans.</span></a>
+  <a class="notice" href="/members/comments/?artist=1001"><span class="notice-title">View teacher feedback for Alex</span><span class="notice-body">A new comment is waiting.</span></a>
+  <a class="notice" href="/members/fanclub/add.asp?artist=1002"><span class="notice-title">Add family to Sam's Fan Club</span><span class="notice-body">Invite more fans.</span></a>
 </section>
 <div class="family">
   <div class="artist-card">
-    <a href="/artists/portfolio.asp?id=16011097">View Portfolio</a>
-    <span class="artist-name">Finn Hall</span>
-    <span class="artist-school">Metrolina Regional Scholars Academy (Grade 1)</span>
+    <a href="/artists/portfolio.asp?id=1002">View Portfolio</a>
+    <span class="artist-name">Sam Doe</span>
+    <span class="artist-school">Example Elementary (Grade 1)</span>
     <span class="stat-artworks">46 artworks</span><span class="stat-fans">2 fans</span>
   </div>
   <div class="artist-card">
-    <a href="/artists/portfolio.asp?id=13447141">View Portfolio</a>
-    <span class="artist-name">Lucas Hall</span>
-    <span class="artist-school">Metrolina Regional Scholars Academy (Grade 6)</span>
+    <a href="/artists/portfolio.asp?id=1001">View Portfolio</a>
+    <span class="artist-name">Alex Doe</span>
+    <span class="artist-school">Example Elementary (Grade 6)</span>
     <span class="stat-artworks">54 artworks</span><span class="stat-fans">2 fans</span>
   </div>
 </div>
@@ -905,19 +905,19 @@ Parsers operate on raw server-rendered HTML. Selectors are from `docs/ARTSONIA-A
 ```html
 <!doctype html><html><body>
 <div class="grid">
-  <div class="grid-item"><a href="/museum/art.asp?id=150567537"><img class="grid-item-image" src="https://images.artsonia.com/art/small/150567537.jpg"><span class="textLabel">My silhouette still life</span></a></div>
-  <div class="grid-item"><a href="/museum/art.asp?id=148945137"><img class="grid-item-image" src="https://images.artsonia.com/art/small/148945137.jpg"><span class="textLabel private-art">Hidden piece</span></a></div>
+  <div class="grid-item"><a href="/museum/art.asp?id=5003"><img class="grid-item-image" src="https://images.artsonia.com/art/small/5003.jpg"><span class="textLabel">My silhouette still life</span></a></div>
+  <div class="grid-item"><a href="/museum/art.asp?id=5001"><img class="grid-item-image" src="https://images.artsonia.com/art/small/5001.jpg"><span class="textLabel private-art">Hidden piece</span></a></div>
 </div>
 </body></html>
 ```
 
 `tests/fixtures/artwork.html`:
 ```html
-<!doctype html><html><head><title>Artsonia Art Museum :: "My silhouette still life" by Lucas26251</title></head><body>
-<h1>Lucas26251's artwork</h1>
+<!doctype html><html><head><title>Artsonia Art Museum :: "My silhouette still life" by Alex1001</title></head><body>
+<h1>Alex1001's artwork</h1>
 <span class="artwork-views">4 artwork views</span>
 <div class="artwork-description">Still life with watering cans.</div>
-<a class="lightlink" href="/members/comments/enter.asp?artist=13447141&art=150567537">Comment on Lucas26251</a>
+<a class="lightlink" href="/members/comments/enter.asp?artist=1001&art=5003">Comment on Alex1001</a>
 <ul class="comments">
   <li class="comment"><span class="comment-author">Grandma</span><span class="comment-text">Beautiful!</span></li>
 </ul>
@@ -928,8 +928,8 @@ Parsers operate on raw server-rendered HTML. Selectors are from `docs/ARTSONIA-A
 ```html
 <!doctype html><html><body>
 <div class="fan-group">
-  <div class="card fan-card"><span class="fan-name">Chris Hall</span><span class="fan-relation">Father</span></div>
-  <div class="card fan-card"><span class="fan-name">Grandma Jo</span><span class="fan-relation">Grandparent</span></div>
+  <div class="card fan-card"><span class="fan-name">Pat Doe</span><span class="fan-relation">Father</span></div>
+  <div class="card fan-card"><span class="fan-name">Grandma Bea</span><span class="fan-relation">Grandparent</span></div>
 </div>
 </body></html>
 ```
@@ -950,9 +950,9 @@ describe('parseStudents', () => {
   it('extracts artistId, name, school, grade and counts from .artist-card', () => {
     const students = parseStudents(fx('dashboard.html'));
     expect(students).toHaveLength(2);
-    expect(students[0]).toMatchObject({ artist_id: '16011097', name: 'Finn Hall', grade: '1', artwork_count: 46 });
-    expect(students[1]).toMatchObject({ artist_id: '13447141', name: 'Lucas Hall', grade: '6' });
-    expect(students[0].school).toContain('Metrolina');
+    expect(students[0]).toMatchObject({ artist_id: '1002', name: 'Sam Doe', grade: '1', artwork_count: 46 });
+    expect(students[1]).toMatchObject({ artist_id: '1001', name: 'Alex Doe', grade: '6' });
+    expect(students[0].school).toContain('Example');
   });
 });
 
@@ -961,7 +961,7 @@ describe('parseNotifications', () => {
     const n = parseNotifications(fx('dashboard.html'));
     expect(n.count).toBe(2);
     expect(n.items).toHaveLength(2);
-    expect(n.items[0]).toMatchObject({ title: "View teacher feedback for Lucas", href: '/members/comments/?artist=13447141' });
+    expect(n.items[0]).toMatchObject({ title: "View teacher feedback for Alex", href: '/members/comments/?artist=1001' });
   });
 });
 
@@ -969,7 +969,7 @@ describe('parsePortfolio', () => {
   it('extracts artworkId, title, private flag, thumbnail from .grid-item', () => {
     const art = parsePortfolio(fx('portfolio.html'));
     expect(art).toHaveLength(2);
-    expect(art[0]).toMatchObject({ artwork_id: '150567537', title: 'My silhouette still life', is_private: false, thumbnail: 'https://images.artsonia.com/art/small/150567537.jpg' });
+    expect(art[0]).toMatchObject({ artwork_id: '5003', title: 'My silhouette still life', is_private: false, thumbnail: 'https://images.artsonia.com/art/small/5003.jpg' });
     expect(art[1].is_private).toBe(true);
   });
 });
@@ -978,9 +978,9 @@ describe('parseArtwork', () => {
   it('extracts title, artist screen-name, views, description, comment link and comments', () => {
     const a = parseArtwork(fx('artwork.html'));
     expect(a.title).toBe('My silhouette still life');
-    expect(a.artist_screen_name).toBe('Lucas26251');
+    expect(a.artist_screen_name).toBe('Alex1001');
     expect(a.views).toBe(4);
-    expect(a.comment_entry).toMatchObject({ artist_id: '13447141', artwork_id: '150567537' });
+    expect(a.comment_entry).toMatchObject({ artist_id: '1001', artwork_id: '5003' });
     expect(a.comments[0]).toMatchObject({ author: 'Grandma', text: 'Beautiful!' });
   });
 });
@@ -989,7 +989,7 @@ describe('parseFans', () => {
   it('extracts fan name and relationship from .fan-card', () => {
     const fans = parseFans(fx('fans.html'));
     expect(fans).toHaveLength(2);
-    expect(fans[1]).toMatchObject({ name: 'Grandma Jo', relationship: 'Grandparent' });
+    expect(fans[1]).toMatchObject({ name: 'Grandma Bea', relationship: 'Grandparent' });
   });
 });
 ```
@@ -1166,7 +1166,7 @@ describe('student tools', () => {
     const out = parse(await harness.callTool('artsonia_list_students'));
     expect(mockFetchHtml).toHaveBeenCalledWith('/members/');
     expect(out.students).toHaveLength(2);
-    expect(out.students[0].artist_id).toBe('16011097');
+    expect(out.students[0].artist_id).toBe('1002');
   });
 
   it('artsonia_get_activity returns notifications', async () => {
@@ -1266,23 +1266,23 @@ describe('portfolio tools', () => {
 
   it('get_portfolio fetches /artists/portfolio.asp?id=<artist_id>', async () => {
     mockFetchHtml.mockResolvedValue(portfolio);
-    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '13447141' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/portfolio.asp?id=13447141');
+    const out = parse(await harness.callTool('artsonia_get_portfolio', { artist_id: '1001' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/artists/portfolio.asp?id=1001');
     expect(out.artworks).toHaveLength(2);
     expect(out.artworks[1].is_private).toBe(true);
   });
 
   it('get_artwork fetches /museum/art.asp?id=<artwork_id> and parses detail', async () => {
     mockFetchHtml.mockResolvedValue(artwork);
-    const out = parse(await harness.callTool('artsonia_get_artwork', { artwork_id: '150567537' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=150567537');
+    const out = parse(await harness.callTool('artsonia_get_artwork', { artwork_id: '5003' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/museum/art.asp?id=5003');
     expect(out.title).toBe('My silhouette still life');
-    expect(out.comment_entry.artist_id).toBe('13447141');
+    expect(out.comment_entry.artist_id).toBe('1001');
   });
 
   it('list_comments returns the comments array from the artwork page', async () => {
     mockFetchHtml.mockResolvedValue(artwork);
-    const out = parse(await harness.callTool('artsonia_list_comments', { artwork_id: '150567537' }));
+    const out = parse(await harness.callTool('artsonia_list_comments', { artwork_id: '5003' }));
     expect(out.comments[0].author).toBe('Grandma');
   });
 
@@ -1389,8 +1389,8 @@ describe('fan tools', () => {
 
   it('get_fans fetches /members/fanclub/?artist=<id> and returns fans', async () => {
     mockFetchHtml.mockResolvedValue(fans);
-    const out = parse(await harness.callTool('artsonia_get_fans', { artist_id: '13447141' }));
-    expect(mockFetchHtml).toHaveBeenCalledWith('/members/fanclub/?artist=13447141');
+    const out = parse(await harness.callTool('artsonia_get_fans', { artist_id: '1001' }));
+    expect(mockFetchHtml).toHaveBeenCalledWith('/members/fanclub/?artist=1001');
     expect(out.fans).toHaveLength(2);
     expect(out.fans[1].relationship).toBe('Grandparent');
   });
@@ -1453,10 +1453,10 @@ The `set_notifications` write is a **read-modify-write** of the master profile f
 ```html
 <!doctype html><html><body>
 <form id="TheForm" name="ParentProfileForm" method="post" action="default.asp">
-  <input type="text" name="FirstName" value="Chris">
-  <input type="text" name="LastName" value="Hall">
-  <input type="text" name="EmailAddress" value="chris@example.com">
-  <input type="hidden" name="EmailAddressPrev" value="chris@example.com">
+  <input type="text" name="FirstName" value="Pat">
+  <input type="text" name="LastName" value="Doe">
+  <input type="text" name="EmailAddress" value="pat@example.com">
+  <input type="hidden" name="EmailAddressPrev" value="pat@example.com">
   <input type="password" name="OldPassword" value="">
   <input type="password" name="NewPassword" value="">
   <input type="password" name="NewPassword2" value="">
@@ -1502,34 +1502,34 @@ describe('write tools', () => {
 
   // post_comment
   it('post_comment without confirm is a dry run — no network call', async () => {
-    const out = parse(await harness.callTool('artsonia_post_comment', { artist_id: '13447141', artwork_id: '150567537', comment: 'Great work!' }));
+    const out = parse(await harness.callTool('artsonia_post_comment', { artist_id: '1001', artwork_id: '5003', comment: 'Great work!' }));
     expect(out.preview).toBe(true);
     expect(mockWrite).not.toHaveBeenCalled();
   });
 
   it('post_comment with confirm posts Comment to /museum/enter.asp', async () => {
     mockWrite.mockResolvedValue({ status: 302, body: '', url: 'https://www.artsonia.com/members/', setCookie: [], location: '/members/' });
-    const out = parse(await harness.callTool('artsonia_post_comment', { artist_id: '13447141', artwork_id: '150567537', comment: 'Great work!', confirm: true }));
-    expect(mockWrite).toHaveBeenCalledWith('/museum/enter.asp?artist=13447141&art=150567537', 'Comment=Great+work%21');
+    const out = parse(await harness.callTool('artsonia_post_comment', { artist_id: '1001', artwork_id: '5003', comment: 'Great work!', confirm: true }));
+    expect(mockWrite).toHaveBeenCalledWith('/museum/enter.asp?artist=1001&art=5003', 'Comment=Great+work%21');
     expect(out.posted).toBe(true);
   });
 
   // invite_fan
   it('invite_fan without confirm is a dry run', async () => {
-    const out = parse(await harness.callTool('artsonia_invite_fan', { artist_id: '13447141', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3' }));
+    const out = parse(await harness.callTool('artsonia_invite_fan', { artist_id: '1001', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3' }));
     expect(out.preview).toBe(true);
     expect(mockWrite).not.toHaveBeenCalled();
   });
 
   it('invite_fan with confirm posts to /members/fanclub/add.asp with the fan fields', async () => {
     mockWrite.mockResolvedValue({ status: 302, body: '', url: 'https://www.artsonia.com/members/fanclub/', setCookie: [], location: '/members/fanclub/' });
-    await harness.callTool('artsonia_invite_fan', { artist_id: '13447141', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3', confirm: true });
+    await harness.callTool('artsonia_invite_fan', { artist_id: '1001', first_name: 'Test', last_name: 'Fan', email: 'test@example.com', relationship_id: '3', confirm: true });
     const [path, body] = mockWrite.mock.calls[0];
-    expect(path).toBe('/members/fanclub/add.asp?artist=13447141');
+    expect(path).toBe('/members/fanclub/add.asp?artist=1001');
     expect(body).toContain('FirstName=Test');
     expect(body).toContain('EmailAddress=test%40example.com');
     expect(body).toContain('RelationshipID=3');
-    expect(body).toContain('ArtistID=13447141');
+    expect(body).toContain('ArtistID=1001');
   });
 
   // set_notifications (read-modify-write)
@@ -1548,7 +1548,7 @@ describe('write tools', () => {
     const [path, body] = mockWrite.mock.calls[0];
     expect(path).toBe('/members/profile/default.asp');
     const params = new URLSearchParams(body);
-    expect(params.get('FirstName')).toBe('Chris');         // preserved
+    expect(params.get('FirstName')).toBe('Pat');         // preserved
     expect(params.get('OptInNews')).toBe('on');            // flipped on
     expect(params.get('OptInArtistActivity')).toBe('on');  // preserved (was checked)
     expect(params.has('OptInPromos')).toBe(false);         // unchecked → omitted
