@@ -44,7 +44,7 @@
         },
         {
           "name": "ARTSONIA_OUTPUT_DIR",
-          "description": "Folders artsonia_download_artwork may save into (a path-delimiter list: ':' on macOS/Linux, ';' on Windows). Unset: ~/Downloads and ~/Pictures, or $MCP_DATA_DIR/downloads when MCP_DATA_DIR is set. Any other dest is refused.",
+          "description": "Folders artsonia_download_artwork may save into (a path-delimiter list: ':' on macOS/Linux, ';' on Windows). Unset: ~/Downloads and ~/Pictures. Any other dest is refused. Not used on a hosted server, which never writes downloads to disk.",
           "isRequired": false,
           "format": "string"
         },
@@ -62,7 +62,7 @@
         },
         {
           "name": "ARTSONIA_INLINE_DOWNLOADS",
-          "description": "1/true/yes/on returns artsonia_download_artwork images inline as base64 image blocks instead of writing them to disk (for hosted deployments); unset/false saves to disk.",
+          "description": "1/true/yes/on returns artsonia_download_artwork images inline as base64 image blocks instead of writing them to disk; unset/false saves to disk. Implied on a hosted server (MCP_DATA_DIR or MCP_BLOB_BASE_URL set).",
           "isRequired": false,
           "format": "string"
         }

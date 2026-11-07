@@ -2,7 +2,8 @@ import { delimiter, join } from 'node:path';
 import { parseBoolEnv, readEnvVar, type EnvSource } from '@chrischall/mcp-utils';
 import type { DownloadIO } from './download.js';
 import { NodeDownloadIO } from './download-io.js';
-import { InlineDownloadIO } from './download-io-inline.js';
+import { isHostedEnv } from '@chrischall/mcp-utils/export';
+import { InlineDownloadIO, MAX_INLINE_BYTES } from './download-io-inline.js';
 
 /** Local default download roots when ARTSONIA_OUTPUT_DIR is unset. */
 export const DEFAULT_DOWNLOAD_ROOTS: readonly string[] = ['~/Downloads', '~/Pictures'];
@@ -38,15 +39,16 @@ export function downloadRoots(env: EnvSource = process.env): readonly string[] {
  * must stay the default (silently switching would stop files appearing on disk).
  * It is confined to {@link downloadRoots}.
  *
- * `ARTSONIA_INLINE_DOWNLOADS=1` selects the filesystem-free
- * {@link InlineDownloadIO}, for a HOSTED deployment where the "filesystem" is the
- * runner's disk and the user can never reach it — there, returning the artwork as
- * inline base64 image blocks is the only way the bytes reach the caller at all.
- * It writes nothing, so `dest` is only a label and is not confined.
- *
- * Both implementations are cheap and side-effect free to construct, so unlike
- * `makeTransport()` this needs no dynamic import.
+ * The filesystem-free {@link InlineDownloadIO} is used when
+ * `ARTSONIA_INLINE_DOWNLOADS=1`, AND on any hosted deployment (`MCP_DATA_DIR` or
+ * `MCP_BLOB_BASE_URL` set) whatever that flag says: a hosted runner's disk is
+ * not the user's, so a file written there would be reported as downloaded while
+ * nobody could ever open it. It returns images inline up to the result cap and,
+ * when the host provides a blob store, the rest as one signed zip link.
  */
-export function makeDownloadIO(): DownloadIO {
-  return parseBoolEnv('ARTSONIA_INLINE_DOWNLOADS') ? new InlineDownloadIO() : new NodeDownloadIO(downloadRoots());
+export function makeDownloadIO(env: EnvSource = process.env): DownloadIO {
+  const inline = parseBoolEnv('ARTSONIA_INLINE_DOWNLOADS', { env });
+  return inline || isHostedEnv(env)
+    ? new InlineDownloadIO(MAX_INLINE_BYTES, { env })
+    : new NodeDownloadIO(downloadRoots(env));
 }

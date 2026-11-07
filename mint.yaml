@@ -36,8 +36,9 @@ env:
     required: false
     help: >-
       Set to 1 to return downloaded artwork as inline MCP image content instead
-      of writing files to disk. Recommended when hosted: the server's filesystem
-      is not the user's, so a written path would be unreachable.
+      of writing files to disk. Not needed when hosted: a hosted server never
+      writes downloads to disk, and returns what does not fit inline as one
+      signed zip link.
   - name: ARTSONIA_TRANSPORT
     required: false
     help: >-
