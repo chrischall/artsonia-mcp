@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.1](https://github.com/chrischall/artsonia-mcp/compare/v1.4.0...v1.4.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **deps:** bump node-html-parser ([#249](https://github.com/chrischall/artsonia-mcp/issues/249)) ([674ba1e](https://github.com/chrischall/artsonia-mcp/commit/674ba1ef011e3f82dc1b05d2a1260a5abe0efb4c))
+* **deps:** upgrade @chrischall/mcp-utils to 3.7.2 so uploads carry only the file's bytes ([#254](https://github.com/chrischall/artsonia-mcp/issues/254)) ([19596f4](https://github.com/chrischall/artsonia-mcp/commit/19596f46b33dcceadf54b8b68bafbf129e46ae54))
+* **download:** deliver every artwork image on hosted servers, by link when it won't fit inline ([#251](https://github.com/chrischall/artsonia-mcp/issues/251)) ([f1d8cdd](https://github.com/chrischall/artsonia-mcp/commit/f1d8cdd635a0a688a3c6ea4b87166a57dc4a92c7))
+
+
+### Documentation
+
+* replace real names in fixtures, docs and source with placeholders ([#253](https://github.com/chrischall/artsonia-mcp/issues/253)) ([be5c8d5](https://github.com/chrischall/artsonia-mcp/commit/be5c8d5d6c17348d8444b93d03e8cdefc0f5e7fe))
+
 ## [1.4.0](https://github.com/chrischall/artsonia-mcp/compare/v1.3.3...v1.4.0) (2026-11-04)
 
 
