@@ -12,9 +12,20 @@ Artsonia MCP server for Claude — developed and maintained by AI (Claude Code)
 
 | variable | default | |
 |---|---|---|
-| `ARTSONIA_OUTPUT_DIR` | `~/Downloads` and `~/Pictures` | The folders `dest` must be inside (subfolders are fine and are created). Several folders: separate them with `:` (`;` on Windows). On a hosted server (`MCP_DATA_DIR` set) the default is `$MCP_DATA_DIR/downloads` instead. With `ARTSONIA_INLINE_DOWNLOADS=1` nothing is written to disk, so `dest` is only a label and is not checked. |
+| `ARTSONIA_OUTPUT_DIR` | `~/Downloads` and `~/Pictures` | The folders `dest` must be inside (subfolders are fine and are created). Several folders: separate them with `:` (`;` on Windows). On a hosted server (`MCP_DATA_DIR` or `MCP_BLOB_BASE_URL` set), or with `ARTSONIA_INLINE_DOWNLOADS=1`, nothing is written to disk, so `dest` is only a label and is not checked: images come back inline up to 10 MiB per result, the rest as one signed zip link when the host has a blob store, and anything that still cannot be delivered is listed by name with the reason. |
 
-## Confirmations
+## Upgrading
+
+### next release
+
+`artsonia_download_artwork` no longer drops or strands an image. What changed in its result:
+
+- **Hosted servers never write to disk.** With `MCP_DATA_DIR` or `MCP_BLOB_BASE_URL` set, downloads now behave as if `ARTSONIA_INLINE_DOWNLOADS=1` were set, whatever that variable says. Before, a hosted server without it saved into `$MCP_DATA_DIR/downloads` and reported files nobody could open.
+- **New `archive`** (only when used): `{ url, expires_at, file_count, bytes, archive_bytes }`. On a hosted server with a blob store, the images that do not fit inline (10 MiB per result) go into one zip behind that signed link. They count as downloaded.
+- **`downloaded[]` entries gain `delivered_via`** on the inline path: `"inline"`, `"archive"` (plus `archive_file`, its path in the zip) or `"link"` (plus `url` and `expires_at`, for a single image too big to inline). Disk downloads are unchanged.
+- **`omitted[]` entries were `{ artwork_id, bytes, is_private }`.** They are now `{ artwork_id, name, bytes, reason, title?, is_private }`. `name` is the file name the image would have had, and `reason` says why it was not delivered. An image whose zip upload failed is moved here from `downloaded`.
+- **`failed[]` entries gain `title`** when the artwork's detail page was read.
+
 
 The writes that reach other people — posting a comment and inviting a fan — ask you to confirm them first. Changing your notification settings, marking feedback read, and downloading artwork into your allowed download folders run straight away. A client that can show a confirmation prompt (Claude Code) shows one. A client that cannot (claude.ai, Claude Desktop) gets a two-step flow instead: the first call changes nothing and returns a preview of exactly what would be sent plus a `confirmToken`; only a second, identical call carrying that token goes ahead. The token is single-use, expires, and is refused if anything changed between the two calls.
 

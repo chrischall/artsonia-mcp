@@ -1,7 +1,7 @@
 import { mkdir, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { assertPathWithinRoots, writeFileSafe } from '@chrischall/mcp-utils';
-import type { DownloadContentBlock, DownloadIO } from './download.js';
+import type { DownloadDelivery, DownloadIO } from './download.js';
 
 // Disk-backed download I/O for a local stdio/desktop install, where the server's
 // filesystem IS the user's — this is the default (see `./make-download-io.ts`).
@@ -41,8 +41,8 @@ export class NodeDownloadIO implements DownloadIO {
     await utimes(path, mtime, mtime);
   }
 
-  extraContent(): DownloadContentBlock[] {
-    // Files are written to disk; nothing is returned inline.
-    return [];
+  async finish(): Promise<DownloadDelivery> {
+    // Files are written to disk as they come; nothing is returned inline.
+    return { content: [] };
   }
 }

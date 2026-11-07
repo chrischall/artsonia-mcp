@@ -57,18 +57,40 @@ export interface DownloadIO {
   exists(path: string): boolean;
   /**
    * Persist `bytes` at `path` (an image `.jpg` or a `.json` sidecar/index).
-   * Resolves `'omitted'` when an image was NOT delivered (the inline IO's size
-   * cap), so the tool lists it as omitted rather than downloaded; anything
-   * else means it was written.
+   * `name` is the dest-relative path (what the caller would call the file).
+   * Resolves `{ omitted: reason }` when an image can NOT be delivered (the
+   * inline IO's caps), so the tool lists it by name as omitted rather than
+   * downloaded; anything else means it was accepted.
    */
-  writeFile(path: string, bytes: Buffer): Promise<void | 'omitted'>;
+  writeFile(path: string, bytes: Buffer, name?: string): Promise<void | { omitted: string }>;
   /** Set `path`'s modified time (no-op where filesystem mtimes don't apply). */
   setMtime(path: string, mtime: Date): Promise<void>;
   /**
-   * MCP content blocks to append to the tool result. The disk IO returns `[]`;
-   * the inline IO returns each written image as a base64 image block.
+   * Deliver what `writeFile` accepted and report how. The disk IO returns no
+   * content (the files are on disk); the inline IO returns image blocks, a
+   * zip link for the overflow, and any image it could not deliver after all
+   * (`undelivered`, path → reason) — the tool moves those to `omitted`.
+   * Drains: a second call starts empty.
    */
-  extraContent(): DownloadContentBlock[];
+  finish(): Promise<DownloadDelivery>;
+}
+
+/** How one delivered image reached the caller (remote IOs only). */
+export type DeliveredVia =
+  | { via: 'inline' }
+  | { via: 'archive'; name: string }
+  | { via: 'link'; url: string; expires_at: string };
+
+/** What {@link DownloadIO.finish} delivered. */
+export interface DownloadDelivery {
+  /** Blocks to append to the tool result. */
+  content: DownloadContentBlock[];
+  /** Route per image path (absent on the disk IO). */
+  via?: Map<string, DeliveredVia>;
+  /** Images `writeFile` accepted that could not be delivered after all: path → reason. */
+  undelivered?: Map<string, string>;
+  /** The one zip holding the images that did not fit inline (hosted only). */
+  archive?: { url: string; expires_at: string; file_count: number; bytes: number; archive_bytes: number };
 }
 
 const DEFAULT_TEMPLATE = '{grade} - {project} - {title}';
@@ -194,7 +216,7 @@ interface Item {
 type Outcome =
   | { kind: 'downloaded'; artwork_id: string; file: string; bytes: number; date_source: 'last-modified' | 'download-time'; timestamp: string; embedded?: boolean }
   | { kind: 'skipped'; artwork_id: string; file: string }
-  | { kind: 'omitted'; artwork_id: string; bytes: number }
+  | { kind: 'omitted'; artwork_id: string; name: string; bytes: number; reason: string }
   | { kind: 'failed'; artwork_id: string; reason: string };
 
 /** Per-request deadline for an image CDN fetch (matches the page transport's). */
@@ -251,7 +273,7 @@ export function registerDownloadTools(
       _meta: schoolMeta('other'),
       inputSchema: z.object({
         artist_id: NumericIdString.describe('Student artist_id (from artsonia_list_students).'),
-        dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing. Must be inside the allowed download folders: ARTSONIA_OUTPUT_DIR when set, otherwise ~/Downloads or ~/Pictures (on a hosted server, $MCP_DATA_DIR/downloads); anything else is refused before any download.'),
+        dest: z.string().min(1).describe('Local destination folder (a leading ~ is expanded). Created if missing. Must be inside the allowed download folders: ARTSONIA_OUTPUT_DIR when set, otherwise ~/Downloads or ~/Pictures; anything else is refused before any download. On a hosted server nothing is written to disk and dest is only a label: images come back inline, any that do not fit come back as one signed zip link (`archive.url`), and any that cannot be delivered are listed in `omitted` by name with the reason.'),
         project: z.string().min(1).optional().describe('Only artworks whose school-project/class name contains this (case-insensitive).'),
         grade: z.string().min(1).optional().describe('Only artworks created in this grade, e.g. "6" or "Grade 6".'),
         limit: z.number().int().positive().optional().describe('Keep only the N most recent matching artworks (portfolio is newest-first).'),
@@ -282,7 +304,7 @@ export function registerDownloadTools(
       const destDir = expandPath(dest);
 
       // One IO PER INVOCATION, not one shared across calls: a filesystem-free
-      // IO buffers image bytes and `extraContent()` drains them on read, so a
+      // IO buffers image bytes and `finish()` drains them, so a
       // shared instance would replay this call's images into the next one's
       // result (and let concurrent calls drain each other). Made up front so a
       // `dest` outside the disk IO's roots is refused before any network call
@@ -414,8 +436,10 @@ export function registerDownloadTools(
             }
           }
           if (path_template !== undefined) await io.mkdirp(dirname(file));
-          if ((await io.writeFile(file, buf)) === 'omitted') {
-            return { kind: 'omitted', artwork_id: it.artwork_id, bytes: buf.length };
+          const name = relative(destDir, file);
+          const refused = await io.writeFile(file, buf, name);
+          if (refused) {
+            return { kind: 'omitted', artwork_id: it.artwork_id, name, bytes: buf.length, reason: refused.omitted };
           }
           // date_source / timestamp reflect the file's ACTUAL mtime.
           const fromSource = set_mtime_from_source && sourceDate !== null;
@@ -434,15 +458,37 @@ export function registerDownloadTools(
         }
       });
 
-      const downloaded = outcomes.filter((o): o is Extract<Outcome, { kind: 'downloaded' }> => o.kind === 'downloaded');
-      const skipped = outcomes.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
-      const failed = outcomes.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
-      // Fetched but not delivered: over the inline IO's size cap. Never counted
-      // as downloaded (the caller never received them); extraContent()'s note
-      // says how to narrow the pull to get them.
-      const omitted = outcomes.filter((o): o is Extract<Outcome, { kind: 'omitted' }> => o.kind === 'omitted');
+      // Deliver what the IO accepted. An image it could not deliver after all
+      // (e.g. the hosted zip upload failed) becomes `omitted`, by name, with
+      // the reason — the caller never received it, so it is not "downloaded".
+      const delivery = await io.finish();
+      const settled: Outcome[] = outcomes.map((o) => {
+        const reason = o.kind === 'downloaded' ? delivery.undelivered?.get(o.file) : undefined;
+        return o.kind === 'downloaded' && reason !== undefined
+          ? { kind: 'omitted', artwork_id: o.artwork_id, name: relative(destDir, o.file), bytes: o.bytes, reason }
+          : o;
+      });
+      const downloaded = settled.filter((o): o is Extract<Outcome, { kind: 'downloaded' }> => o.kind === 'downloaded');
+      const skipped = settled.filter((o): o is Extract<Outcome, { kind: 'skipped' }> => o.kind === 'skipped');
+      const failed = settled.filter((o): o is Extract<Outcome, { kind: 'failed' }> => o.kind === 'failed');
+      // Fetched but not delivered (the inline IO's caps, or a failed upload).
+      // Never counted as downloaded; each carries its name and reason.
+      const omitted = settled.filter((o): o is Extract<Outcome, { kind: 'omitted' }> => o.kind === 'omitted');
       const byId = new Map(items.map((it) => [it.artwork_id, it]));
       const isPrivate = (artworkId: string) => byId.get(artworkId)?.is_private ?? false;
+      /** The artwork's title, when a detail page was read (names an item the caller can recognise). */
+      const titleOf = (artworkId: string) => {
+        const t = byId.get(artworkId)?.title;
+        return t ? { title: t } : {};
+      };
+      /** How a delivered image reached the caller (remote IOs only). */
+      const viaOf = (file: string) => {
+        const v = delivery.via?.get(file);
+        if (!v) return {};
+        if (v.via === 'link') return { delivered_via: 'link' as const, url: v.url, expires_at: v.expires_at };
+        if (v.via === 'archive') return { delivered_via: 'archive' as const, archive_file: v.name };
+        return { delivered_via: 'inline' as const };
+      };
 
       // 6. Optional sidecar manifest of what's on disk. Written whenever
       // write_index is requested on a persisting IO (even if everything was
@@ -550,11 +596,13 @@ export function registerDownloadTools(
         resolution,
         ...(warning ? { warning } : {}),
         ...(countCheck ? { count_check: countCheck } : {}),
+        ...(delivery.archive ? { archive: delivery.archive } : {}),
         downloaded: downloaded.map(({ kind, file, ...rest }) => ({
           ...rest,
           // A file path only means something to the caller if a file was
           // actually written somewhere they can reach.
           ...(io.persistsFiles ? { file } : {}),
+          ...viaOf(file),
           is_private: isPrivate(rest.artwork_id),
         })),
         ...(skipped.length
@@ -566,18 +614,17 @@ export function registerDownloadTools(
               })),
             }
           : {}),
-        ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
-        ...(omitted.length ? { omitted: omitted.map(({ kind, ...rest }) => ({ ...rest, is_private: isPrivate(rest.artwork_id) })) } : {}),
+        ...(failed.length ? { failed: failed.map(({ kind, ...rest }) => ({ ...rest, ...titleOf(rest.artwork_id), is_private: isPrivate(rest.artwork_id) })) } : {}),
+        ...(omitted.length ? { omitted: omitted.map(({ kind, ...rest }) => ({ ...rest, ...titleOf(rest.artwork_id), is_private: isPrivate(rest.artwork_id) })) } : {}),
         ...(indexFile ? { index_file: indexFile } : {}),
         ...(metadataCount !== undefined ? { metadata_count: metadataCount } : {}),
         ...(embed_metadata ? { embedded_count: downloaded.filter((d) => d.embedded).length } : {}),
       });
-      // A filesystem-free DownloadIO returns the downloaded image bytes as MCP
-      // content blocks, appended alongside the JSON summary. The disk-backed
-      // NodeDownloadIO returns [] here (the files are on disk), so its result is
+      // A filesystem-free DownloadIO returns the image bytes (and its notes) as
+      // MCP content blocks, appended alongside the JSON summary. The disk-backed
+      // NodeDownloadIO returns none (the files are on disk), so its result is
       // unchanged.
-      const extra = io.extraContent();
-      if (extra.length) result.content.push(...extra);
+      if (delivery.content.length) result.content.push(...delivery.content);
       return result;
     },
   );

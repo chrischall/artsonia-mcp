@@ -15,44 +15,44 @@ describe('InlineDownloadIO', () => {
     await io.writeFile('/x/a.jpg', Buffer.from('AAAA'));
     await io.writeFile('/x/a.json', Buffer.from('{"k":1}')); // sidecar — nowhere to go
     await io.writeFile('/x/index.json', Buffer.from('[]')); // manifest — nowhere to go
-    const out = io.extraContent();
+    const out = (await io.finish()).content;
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg', data: b64('AAAA') });
   });
 
-  it('drains on read: each extraContent() returns only the writes since the last read', async () => {
+  it('drains on read: each finish() returns only the writes since the last one', async () => {
     const io = new InlineDownloadIO();
     await io.writeFile('/x/a.jpg', Buffer.from('a'));
-    expect(io.extraContent().map((b) => (b as { data: string }).data)).toEqual([b64('a')]);
-    // A second invocation must NOT re-emit the first call's image (the instance
-    // is shared for the whole MCP session).
+    expect((await io.finish()).content.map((b) => (b as { data: string }).data)).toEqual([b64('a')]);
+    // A reused instance must NOT re-emit the first call's image.
     await io.writeFile('/x/b.jpg', Buffer.from('b'));
-    expect(io.extraContent().map((b) => (b as { data: string }).data)).toEqual([b64('b')]);
+    expect((await io.finish()).content.map((b) => (b as { data: string }).data)).toEqual([b64('b')]);
     // Nothing written since the last drain → empty.
-    expect(io.extraContent()).toEqual([]);
+    expect((await io.finish()).content).toEqual([]);
   });
 
   it('caps cumulative inline bytes and reports the omitted images in a text warning block', async () => {
-    const io = new InlineDownloadIO(10); // 10-byte cap
+    const io = new InlineDownloadIO(10, { env: {} }); // 10-byte cap, no blob store
     await io.writeFile('/x/a.jpg', Buffer.alloc(6)); // fits (6 <= 10)
     await io.writeFile('/x/b.jpg', Buffer.alloc(6)); // 6 + 6 > 10 → omitted
-    const out = io.extraContent();
+    const out = (await io.finish()).content;
     const images = out.filter((b) => b.type === 'image');
     const notes = out.filter((b) => b.type === 'text');
     expect(images).toHaveLength(1);
     expect(notes).toHaveLength(1);
-    expect((notes[0] as { text: string }).text).toMatch(/omitted/i);
+    expect((notes[0] as { text: string }).text).toMatch(/NOT delivered/);
+    expect((notes[0] as { text: string }).text).toContain('b.jpg');
     // Counters reset after the drain — a fresh invocation starts from zero.
     await io.writeFile('/x/c.jpg', Buffer.alloc(6));
-    expect(io.extraContent().filter((b) => b.type === 'image')).toHaveLength(1);
+    expect((await io.finish()).content.filter((b) => b.type === 'image')).toHaveLength(1);
   });
 
   // The tool needs to know WHICH images were dropped, so it can list them as
   // omitted rather than downloaded. writeFile says so per write.
-  it("tells the caller which writes were omitted: 'omitted' over the cap, nothing otherwise", async () => {
-    const io = new InlineDownloadIO(10);
+  it('tells the caller which writes were omitted, and why: { omitted: reason } over the cap, nothing otherwise', async () => {
+    const io = new InlineDownloadIO(10, { env: {} });
     expect(await io.writeFile('/x/a.jpg', Buffer.alloc(6))).toBeUndefined();
-    expect(await io.writeFile('/x/b.jpg', Buffer.alloc(6))).toBe('omitted');
+    expect(await io.writeFile('/x/b.jpg', Buffer.alloc(6))).toEqual({ omitted: expect.stringMatching(/inline limit/) });
     expect(await io.writeFile('/x/meta.json', Buffer.alloc(60))).toBeUndefined(); // sidecars are never "omitted images"
   });
 
@@ -68,20 +68,20 @@ describe('InlineDownloadIO', () => {
   });
 
   it('inlines a payload of exactly 10 MiB and keeps the serialized result under the 14 MiB host limit', async () => {
-    const io = new InlineDownloadIO();
+    const io = new InlineDownloadIO(MAX_INLINE_BYTES, { env: {} });
     await io.writeFile('/x/a.jpg', Buffer.alloc(6 * MIB));
     await io.writeFile('/x/b.jpg', Buffer.alloc(4 * MIB)); // cumulative = exactly 10 MiB
-    const out = io.extraContent();
+    const out = (await io.finish()).content;
     expect(out.filter((b) => b.type === 'image')).toHaveLength(2);
     expect(out.filter((b) => b.type === 'text')).toHaveLength(0);
     const rpc = JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: out } });
     expect(Buffer.byteLength(rpc)).toBeLessThan(HOST_RESULT_MAX_BYTES);
   });
 
-  it('refuses a payload just over 10 MiB with its own note naming the narrower pulls', async () => {
-    const io = new InlineDownloadIO();
+  it('with no blob store, refuses a payload just over 10 MiB with its own note naming the narrower pulls', async () => {
+    const io = new InlineDownloadIO(MAX_INLINE_BYTES, { env: {} });
     await io.writeFile('/x/a.jpg', Buffer.alloc(10 * MIB + 1));
-    const out = io.extraContent();
+    const out = (await io.finish()).content;
     expect(out.filter((b) => b.type === 'image')).toHaveLength(0);
     const notes = out.filter((b) => b.type === 'text') as { text: string }[];
     expect(notes).toHaveLength(1);
