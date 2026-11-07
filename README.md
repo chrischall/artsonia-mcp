@@ -20,12 +20,13 @@ Artsonia MCP server for Claude — developed and maintained by AI (Claude Code)
 
 `artsonia_download_artwork` no longer drops or strands an image. What changed in its result:
 
-- **Hosted servers never write to disk.** With `MCP_DATA_DIR` or `MCP_BLOB_BASE_URL` set, downloads now behave as if `ARTSONIA_INLINE_DOWNLOADS=1` were set, whatever that variable says. Before, a hosted server without it saved into `$MCP_DATA_DIR/downloads` and reported files nobody could open.
+- **Hosted servers never write to disk.** With `MCP_DATA_DIR` or `MCP_BLOB_BASE_URL` set, downloads now behave as if `ARTSONIA_INLINE_DOWNLOADS=1` were set, whatever that variable says. Before, a hosted server without it saved into `$MCP_DATA_DIR/downloads` and reported files nobody could open. Because no file is written, a hosted result no longer carries `dest`, `downloaded[].file`, `skipped[].file`, `index_file` or `metadata_count` (`write_index` and `write_metadata` have nothing to write there); read `delivered_via` instead.
 - **New `archive`** (only when used): `{ url, expires_at, file_count, bytes, archive_bytes }`. On a hosted server with a blob store, the images that do not fit inline (10 MiB per result) go into one zip behind that signed link. They count as downloaded.
 - **`downloaded[]` entries gain `delivered_via`** on the inline path: `"inline"`, `"archive"` (plus `archive_file`, its path in the zip) or `"link"` (plus `url` and `expires_at`, for a single image too big to inline). Disk downloads are unchanged.
 - **`omitted[]` entries were `{ artwork_id, bytes, is_private }`.** They are now `{ artwork_id, name, bytes, reason, title?, is_private }`. `name` is the file name the image would have had, and `reason` says why it was not delivered. An image whose zip upload failed is moved here from `downloaded`.
 - **`failed[]` entries gain `title`** when the artwork's detail page was read.
 
+## Confirmations
 
 The writes that reach other people — posting a comment and inviting a fan — ask you to confirm them first. Changing your notification settings, marking feedback read, and downloading artwork into your allowed download folders run straight away. A client that can show a confirmation prompt (Claude Code) shows one. A client that cannot (claude.ai, Claude Desktop) gets a two-step flow instead: the first call changes nothing and returns a preview of exactly what would be sent plus a `confirmToken`; only a second, identical call carrying that token goes ahead. The token is single-use, expires, and is refused if anything changed between the two calls.
 
