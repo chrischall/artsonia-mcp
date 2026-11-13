@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2](https://github.com/chrischall/artsonia-mcp/compare/v1.4.1...v1.4.2) (2026-11-13)
+
+
+### Bug Fixes
+
+* **deps:** bump the production-dependencies group with 3 updates ([#256](https://github.com/chrischall/artsonia-mcp/issues/256)) ([ad4fc9e](https://github.com/chrischall/artsonia-mcp/commit/ad4fc9e80dde43824951c697fb017fdcf6578326))
+
 ## [1.4.1](https://github.com/chrischall/artsonia-mcp/compare/v1.4.0...v1.4.1) (2026-11-07)
 
 
